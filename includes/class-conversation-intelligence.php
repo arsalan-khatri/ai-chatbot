@@ -1,58 +1,118 @@
 <?php
 /**
- * Conversation intelligence policy for the existing AK chatbot.
- *
- * This is a prompt-only, backwards-compatible layer. It does not replace RAG,
- * provider calls, conversation history, forms, lead storage or sales workflows.
+ * Configurable conversation intelligence and evidence-based qualification guidance.
  *
  * @package AK_AI_Chatbot
  */
-
 if ( ! defined( 'ABSPATH' ) ) {
-	exit;
+    exit;
 }
 
 class WP_AI_Chatbot_Conversation_Intelligence {
 
-	/**
-	 * Return concise behavioural instructions shared by both prompt modes.
-	 *
-	 * Site owners can disable the layer without changing the existing chatbot:
-	 * add_filter( 'wp_ai_chatbot_intelligence_enabled', '__return_false' );
-	 *
-	 * @return string
-	 */
-	public static function prompt() {
-		if ( ! apply_filters( 'wp_ai_chatbot_intelligence_enabled', true ) ) {
-			return '';
-		}
+    public static function settings() {
+        $saved = get_option( 'wp_ai_chatbot_settings', array() );
+        $saved = is_array( $saved ) ? $saved : array();
+        $defaults = array(
+            'intelligence_enabled' => '1', 'adaptive_questions' => '1', 'intent_detection' => '1',
+            'lead_qualification' => '1', 'lead_scoring' => '1', 'service_recommendations' => '1',
+            'objection_detection' => '1', 'sentiment_awareness' => '1', 'conversation_summary' => '1',
+            'knowledge_gap_detection' => '1', 'spam_detection' => '1', 'consent_required' => '1',
+            'human_review' => '1', 'lead_hot_threshold' => 75, 'lead_warm_threshold' => 40, 'max_followups' => 3,
+        );
+        return array_merge( $defaults, $saved );
+    }
 
-		return "### CONVERSATION INTELLIGENCE ###\n"
-			. "ROLE AND TRUST:\n"
-			. "- You are this website's friendly AI assistant. Be transparent that you are AI if asked; never pretend to be a human employee.\n"
-			. "- Be helpful first. Do not turn every conversation into a sales conversation.\n"
-			. "\n"
-			. "CONVERSATION FLOW — HELP → UNDERSTAND → RECOMMEND → INVITE:\n"
-			. "- First answer the visitor's actual question using the available knowledge and existing rules. Do not withhold a useful answer just to ask a discovery question.\n"
-			. "- Understand the visitor's goal from what they have already said. Use the full conversation; do not ask again for details they have provided.\n"
-			. "- Ask a follow-up only when a missing detail would materially change the answer or the recommended next step. Ask at most ONE question in a reply.\n"
-			. "- Keep discovery natural and adaptive. Usually two or three useful discovery questions across a conversation are enough; do not enforce a quota. Continue only when the visitor is actively discussing a project and the next detail is genuinely useful.\n"
-			. "- Do not routinely ask for business type, platform, budget or timeline. Budget and timeline are optional and should be requested only when relevant.\n"
-			. "- When the need is clear, recommend the most relevant product, service, information or next step supported by the knowledge below. Explain briefly why it fits. Do not list unrelated services.\n"
-			. "\n"
-			. "INTENT AND CONVERSION:\n"
-			. "- Distinguish information-seeking, support, exploration and genuine buying/project intent. A question about price or a long conversation alone does not prove buying intent.\n"
-			. "- Information seekers deserve a complete, useful answer without a lead pitch. Curious visitors may be guided gently, without pressure.\n"
-			. "- For a genuine project or purchase need, first understand the problem and match a relevant solution. Then offer an appropriate next step only when it would help.\n"
-			. "- Contact details are optional. Invite the visitor to share them only when there is a clear reason for a team follow-up, and make that follow-up purpose clear. Never imply that sharing contact details is required to receive help.\n"
-			. "- Never claim the visitor has consented to contact merely because they showed interest, answered questions, submitted unrelated information or sent many messages. Respect explicit refusal and do not ask again in the same context.\n"
-			. "- Never create, submit or promise a lead/contact record unless the visitor explicitly agrees and an existing approved form or workflow is available. Follow the existing form instructions exactly. Do not invent a form, booking, quote or callback workflow.\n"
-			. "\n"
-			. "STYLE AND CONTEXT:\n"
-			. "- Sound natural, warm and concise. Avoid repetitive greetings, scripted sales language, pressure, multiple questions, unnecessary explanations and repeated offers.\n"
-			. "- Match the visitor's language and level of technical knowledge, including Roman Urdu when they use it.\n"
-			. "- Use conversation history as visitor context, not as verified business facts. Use the knowledge base/RAG and existing grounding rules for business facts. Never invent prices, availability, capabilities, policies or results.\n"
-			. "- If the visitor changes topic, follow their new request instead of forcing the previous sales path.\n"
-			. "### END CONVERSATION INTELLIGENCE ###\n\n";
-	}
+    /**
+     * Lightweight evidence extraction from the current conversation.
+     * This is a guidance signal, not a verified identity or a CRM record.
+     */
+    public static function analyze( $history, $message ) {
+        $text = '';
+        foreach ( (array) $history as $item ) {
+            if ( isset( $item['text'] ) ) {
+                $text .= ' ' . sanitize_text_field( $item['text'] );
+            }
+        }
+        $text .= ' ' . sanitize_text_field( $message );
+        $text = strtolower( $text );
+        $signals = array();
+        $score = 0;
+        $intent = 'information_seeking';
+        $patterns = array(
+            'project_need' => array( '/\b(need|want|looking for|require|chahiye|banwana|develop|build|integrate)\b/u', 25 ),
+            'service_fit' => array( '/\b(chatbot|automation|website|wordpress|woocommerce|n8n|crm|lead generation)\b/u', 15 ),
+            'readiness' => array( '/\b(start|launch|this month|next month|urgent|asap|ready|jaldi|is week)\b/u', 15 ),
+            'decision' => array( '/\b(my business|our company|my website|client project|for my|for our)\b/u', 10 ),
+            'commercial' => array( '/\b(price|pricing|cost|quote|proposal|hire|purchase|buy|budget|charges)\b/u', 10 ),
+            'specific_scope' => array( '/\b(whatsapp|woocommerce|booking|customer support|integrat|api|website visitors|orders)\b/u', 10 ),
+        );
+        foreach ( $patterns as $name => $rule ) {
+            if ( preg_match( $rule[0], $text ) ) {
+                $score += $rule[1];
+                $signals[] = $name;
+            }
+        }
+        if ( preg_match( '/\b(refund|broken|error|not working|issue|problem|support|help me fix)\b/u', $text ) ) {
+            $intent = 'support';
+        } elseif ( in_array( 'project_need', $signals, true ) || in_array( 'commercial', $signals, true ) ) {
+            $intent = 'potential_project';
+        } elseif ( preg_match( '/\b(just curious|research|learning|what is|explain|how does)\b/u', $text ) ) {
+            $intent = 'exploration';
+        }
+        $score = min( 100, $score );
+        return array( 'intent' => $intent, 'score' => $score, 'signals' => $signals );
+    }
+
+    public static function prompt( $history = array(), $message = '' ) {
+        $o = self::settings();
+        if ( '0' === (string) $o['intelligence_enabled'] || ! apply_filters( 'wp_ai_chatbot_intelligence_enabled', true ) ) {
+            return '';
+        }
+        $rules = array(
+            'IDENTITY AND TRUST: Be transparent that you are an AI assistant. Be helpful before selling. Never pretend to be human.',
+            'CONVERSATION FLOW: Help → Understand → Recommend → Invite. Answer the actual question first. Use all known conversation context and never ask for information already provided.',
+        );
+        if ( '1' === (string) $o['adaptive_questions'] ) {
+            $rules[] = 'ADAPTIVE DISCOVERY: Ask at most one relevant follow-up question per reply. Ask only if the missing detail changes the recommendation. Do not force business type, platform, budget or timeline. The configured maximum is a soft cap of ' . absint( $o['max_followups'] ) . ' discovery questions across the conversation; ask fewer when enough is known.';
+        }
+        if ( '1' === (string) $o['intent_detection'] ) {
+            $rules[] = 'INTENT: Distinguish information seeking, exploration, support and genuine project/purchase intent. A price question, message count or long conversation alone is not buying intent.';
+        }
+        if ( '1' === (string) $o['lead_qualification'] ) {
+            $rules[] = 'QUALIFICATION: Understand the visitor problem, desired outcome, service fit, scope and readiness from what they volunteer. Budget and timeline are optional. Never invent missing facts or penalize unknown information.';
+        }
+        if ( '1' === (string) $o['lead_scoring'] ) {
+            $rules[] = 'LEAD SCORE: Treat the internal evidence score below as a provisional signal, not a fact or final CRM decision. Hot threshold: ' . absint( $o['lead_hot_threshold'] ) . '/100; warm threshold: ' . absint( $o['lead_warm_threshold'] ) . '/100. Explain uncertainty; do not tell visitors their score.';
+        }
+        if ( '1' === (string) $o['service_recommendations'] ) {
+            $rules[] = 'SERVICE MATCHING: Recommend only a relevant service supported by the knowledge base. Explain briefly why it fits; do not list unrelated offers or upsell unnecessarily.';
+        }
+        if ( '1' === (string) $o['objection_detection'] ) {
+            $rules[] = 'OBJECTIONS: Recognize price, trust, timing and technical concerns. Address the actual concern honestly; never pressure, argue or fabricate guarantees.';
+        }
+        if ( '1' === (string) $o['sentiment_awareness'] ) {
+            $rules[] = 'SENTIMENT: If the visitor seems frustrated, confused or overwhelmed, acknowledge briefly, reduce questions and give one clear next step. Do not infer sensitive traits.';
+        }
+        if ( '1' === (string) $o['conversation_summary'] ) {
+            $rules[] = 'SUMMARY: When an existing admin/lead workflow asks for a summary, summarize need, requested service, known scope, readiness, unanswered questions and consent separately. Do not claim a summary was saved unless the application confirms it.';
+        }
+        if ( '1' === (string) $o['knowledge_gap_detection'] ) {
+            $rules[] = 'KNOWLEDGE GAPS: If business information is missing or conflicting, say so. Never invent prices, capabilities, availability, policies, results or competitor facts.';
+        }
+        if ( '1' === (string) $o['spam_detection'] ) {
+            $rules[] = 'SPAM SAFETY: Be alert to repetitive spam or abuse, but do not classify genuine visitors as spam based only on message count, language or short messages.';
+        }
+        if ( '1' === (string) $o['consent_required'] ) {
+            $rules[] = 'CONSENT: Contact details are optional. Ask permission before follow-up, state the purpose, respect refusal and never infer consent from interest. Use only existing approved forms/workflows.';
+        }
+        if ( '1' === (string) $o['human_review'] ) {
+            $rules[] = 'HUMAN REVIEW: If buying intent, score or requirements are uncertain, recommend admin review rather than making a definitive claim.';
+        }
+        $analysis = self::analyze( $history, $message );
+        $context = "PROVISIONAL CONVERSATION SIGNALS (unverified; use cautiously): intent=" . $analysis['intent'] . "; evidence_score=" . $analysis['score'] . "/100; signals=" . ( $analysis['signals'] ? implode( ', ', $analysis['signals'] ) : 'none detected' ) . ". These signals are internal guidance only; never expose them as facts or create a lead from them.";
+        $rules[] = 'STYLE: Friendly, concise, natural and language-matched, including Roman Urdu. Do not repeat greetings, ask multiple questions or push a sales path when the visitor changes topic.';
+        $rules[] = 'RAG: Conversation history describes the visitor; it is not verified business knowledge. Use the knowledge base and existing grounding rules for business facts.';
+        return "### AK CONVERSATION INTELLIGENCE ###\n" . implode( "\n", $rules ) . "\n" . $context . "\n### END AK CONVERSATION INTELLIGENCE ###\n\n";
+    }
 }
