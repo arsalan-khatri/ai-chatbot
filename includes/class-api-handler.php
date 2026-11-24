@@ -632,6 +632,7 @@ class WP_AI_Chatbot_API_Handler {
 		if ( '' !== $forms ) {
 			$p .= "FORMS: if the visitor asks for a form or agrees to your offer, reply with ONLY the exact shortcode. If they only hint at it, ask first.\n" . $forms;
 		}
+		$p .= WP_AI_Chatbot_Conversation_Intelligence::prompt();
 		return $p;
 	}
 
@@ -709,6 +710,7 @@ class WP_AI_Chatbot_API_Handler {
 			}
 		}
 
+		$system_prompt .= WP_AI_Chatbot_Conversation_Intelligence::prompt();
 		return $system_prompt;
 	}
 
