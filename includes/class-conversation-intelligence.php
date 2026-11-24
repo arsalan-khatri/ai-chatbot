@@ -55,10 +55,14 @@ class WP_AI_Chatbot_Conversation_Intelligence {
         }
         if ( preg_match( '/\b(refund|broken|error|not working|issue|problem|support|help me fix)\b/u', $text ) ) {
             $intent = 'support';
-        } elseif ( in_array( 'project_need', $signals, true ) || in_array( 'commercial', $signals, true ) ) {
-            $intent = 'potential_project';
-        } elseif ( preg_match( '/\b(just curious|research|learning|what is|explain|how does)\b/u', $text ) ) {
+        } elseif ( preg_match( '/\b(just curious|research|learning|what is|explain|how does)\b/u', $text ) && ! preg_match( '/\b(hire|buy|purchase|quote|proposal|need a service|looking to build)\b/u', $text ) ) {
             $intent = 'exploration';
+        } elseif (
+            ( in_array( 'project_need', $signals, true ) && in_array( 'service_fit', $signals, true ) )
+            || ( in_array( 'readiness', $signals, true ) && in_array( 'service_fit', $signals, true ) )
+            || ( in_array( 'specific_scope', $signals, true ) && in_array( 'decision', $signals, true ) )
+        ) {
+            $intent = 'potential_project';
         }
         $score = min( 100, $score );
         return array( 'intent' => $intent, 'score' => $score, 'signals' => $signals );
