@@ -1,0 +1,841 @@
+<?php
+/**
+ * Chat Logger & History Viewer (Messenger UI with WhatsApp Sticky Dates & Range Filter)
+ */
+
+if ( ! defined( 'ABSPATH' ) ) exit;
+
+class WP_AI_Chatbot_Logger {
+
+    public function register_hooks() {
+        add_action( 'admin_menu', array( $this, 'add_submenu' ) );
+    }
+
+    public function add_submenu() {
+        add_submenu_page(
+            'wp-ai-chatbot',
+            'Chat History',
+            'Chat History',
+            'manage_options',
+            'wp-ai-chatbot-logs',
+            array( $this, 'display_logs_page' )
+        );
+    }
+
+    public static function log_chat($session_id, $user_message, $bot_reply) {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'ai_chat_logs';
+
+        // Schema check only once per version, not on every chat message.
+        if ( get_option( 'wp_ai_logs_schema_v' ) !== '2' ) {
+            if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
+                $charset_collate = $wpdb->get_charset_collate();
+                $wpdb->query("CREATE TABLE IF NOT EXISTS $table_name (
+                    id bigint(20) NOT NULL AUTO_INCREMENT,
+                    session_id varchar(100) NOT NULL,
+                    user_message text NOT NULL,
+                    bot_reply text NOT NULL,
+                    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY  (id),
+                    KEY session_idx (session_id),
+                    KEY created_idx (created_at)
+                ) $charset_collate;");
+            } else {
+                $column_exists = $wpdb->get_results("SHOW COLUMNS FROM $table_name LIKE 'session_id'");
+                if (empty($column_exists)) {
+                    $wpdb->query("ALTER TABLE $table_name ADD session_id varchar(100) NOT NULL DEFAULT 'unknown'");
+                }
+                if ( empty( $wpdb->get_results("SHOW INDEX FROM $table_name WHERE Key_name = 'session_idx'") ) ) {
+                    $wpdb->query("ALTER TABLE $table_name ADD INDEX session_idx (session_id), ADD INDEX created_idx (created_at)");
+                }
+            }
+            update_option( 'wp_ai_logs_schema_v', '2', false );
+        }
+
+        $wpdb->insert(
+            $table_name,
+            array(
+                'session_id'   => sanitize_text_field($session_id),
+                'user_message' => sanitize_textarea_field($user_message),
+                'bot_reply'    => sanitize_textarea_field($bot_reply),
+                'created_at'   => current_time('mysql') 
+            )
+        );
+    }
+
+    // WhatsApp Style Date Format Logic
+    private function get_whatsapp_date_label($timestamp_str) {
+        $log_time = strtotime($timestamp_str);
+        $current_time = current_time('timestamp');
+        
+        $today_start = strtotime(date('Y-m-d', $current_time));
+        $yesterday_start = strtotime('-1 day', $today_start);
+        $week_ago_start = strtotime('-6 days', $today_start);
+        
+        $log_date = strtotime(date('Y-m-d', $log_time));
+
+        if ($log_date == $today_start) {
+            return 'Today';
+        } elseif ($log_date == $yesterday_start) {
+            return 'Yesterday';
+        } elseif ($log_date >= $week_ago_start) {
+            return date('l', $log_time); 
+        } else {
+            return date('n/j/Y', $log_time); 
+        }
+    }
+
+    public function display_logs_page() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'ai_chat_logs';
+        
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( 'Not allowed.' );
+        }
+
+        // Admin-only deletion of conversation rows. Deliberately touch ONLY
+        // ai_chat_logs; lead/contact, analytics and session records are preserved.
+        if ( isset( $_POST['delete_chat_session'] ) ) {
+            check_admin_referer( 'wp_ai_delete_chat_history' );
+            $sid = isset( $_POST['session_id'] ) ? sanitize_text_field( wp_unslash( $_POST['session_id'] ) ) : '';
+            $deleted = $sid ? $wpdb->delete( $table_name, array( 'session_id' => $sid ), array( '%s' ) ) : false;
+            if ( false !== $deleted ) {
+                echo '<div class="notice notice-success is-dismissible"><p>Conversation history deleted. Lead records were kept.</p></div>';
+            } else {
+                echo '<div class="notice notice-error is-dismissible"><p>Could not delete this conversation history.</p></div>';
+            }
+        }
+
+        if ( isset( $_POST['delete_selected_sessions'] ) ) {
+            check_admin_referer( 'wp_ai_delete_chat_history' );
+            $selected = isset( $_POST['session_ids'] ) ? (array) wp_unslash( $_POST['session_ids'] ) : array();
+            $selected = array_values( array_unique( array_filter( array_map( 'sanitize_text_field', $selected ) ) ) );
+            $deleted_rows = 0;
+            foreach ( $selected as $sid ) {
+                $result = $wpdb->delete( $table_name, array( 'session_id' => $sid ), array( '%s' ) );
+                if ( false !== $result ) {
+                    $deleted_rows += (int) $result;
+                }
+            }
+            echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( count( $selected ) . ' selected conversation(s) processed. Chat history rows deleted: ' . $deleted_rows . '. Lead records were kept.' ) . '</p></div>';
+        }
+
+        if ( isset( $_POST['clear_logs'] ) ) {
+            check_admin_referer( 'wp_ai_clear_logs' );
+            // DELETE is intentionally limited to chat logs; never truncate other tables.
+            $wpdb->query( "DELETE FROM {$table_name}" );
+            echo '<div class="notice notice-success is-dismissible"><p>All Chat History deleted. Lead records were kept.</p></div>';
+        }
+
+        $sessions = [];
+        $logs_by_session = [];
+        $total_sessions = 0;
+        $per_page = 20;
+        $current_page = isset( $_GET['chat_page'] ) ? max( 1, absint( $_GET['chat_page'] ) ) : 1;
+        $total_pages = 1;
+        
+        // Date range filter (start date & end date).
+        $start_date = isset($_GET['start_date']) ? sanitize_text_field($_GET['start_date']) : '';
+        $end_date   = isset($_GET['end_date']) ? sanitize_text_field($_GET['end_date']) : '';
+        $where_clause = "";
+        
+        if (!empty($start_date) && !empty($end_date)) {
+            $where_clause = $wpdb->prepare(" WHERE DATE(created_at) BETWEEN %s AND %s ", $start_date, $end_date);
+        } elseif (!empty($start_date)) {
+            $where_clause = $wpdb->prepare(" WHERE DATE(created_at) >= %s ", $start_date);
+        } elseif (!empty($end_date)) {
+            $where_clause = $wpdb->prepare(" WHERE DATE(created_at) <= %s ", $end_date);
+        }
+
+        $min_date = '';
+        $max_date = date('Y-m-d'); 
+
+        if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name) {
+            
+            $date_range = $wpdb->get_row("SELECT MIN(DATE(created_at)) as first_chat, MAX(DATE(created_at)) as last_chat FROM $table_name");
+            if ($date_range && $date_range->first_chat) {
+                $min_date = $date_range->first_chat;
+                $max_date = $date_range->last_chat;
+            }
+
+            // Count all distinct conversations matching the active date filter.
+            // Pagination limits only the admin listing; it does not delete or cap stored history.
+            $total_sessions = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT session_id) FROM $table_name $where_clause" );
+            $total_pages = max( 1, (int) ceil( $total_sessions / $per_page ) );
+            $current_page = min( $current_page, $total_pages );
+            $offset = ( $current_page - 1 ) * $per_page;
+
+            $sessions_query = "SELECT session_id, MAX(created_at) as latest_interaction FROM $table_name $where_clause GROUP BY session_id ORDER BY latest_interaction DESC LIMIT %d OFFSET %d";
+            $sessions = $wpdb->get_results( $wpdb->prepare( $sessions_query, $per_page, $offset ) );
+            
+            if (!empty($sessions)) {
+                $session_ids = array_map(function($s) { return $s->session_id; }, $sessions);
+                $placeholders = implode(',', array_fill(0, count($session_ids), '%s'));
+                
+                $query = "SELECT * FROM $table_name WHERE session_id IN ($placeholders) ORDER BY created_at ASC";
+                $all_logs = $wpdb->get_results($wpdb->prepare($query, $session_ids));
+                
+                foreach ($all_logs as $log) {
+                    $logs_by_session[$log->session_id][] = $log;
+                }
+            }
+        }
+
+        $multi_forms = get_option( 'wp_ai_chatbot_multi_forms', array() );
+
+        // Per chat: who it is (from a lead form), message counts and tokens.
+        $session_ids = array_map( function ( $s ) { return $s->session_id; }, $sessions );
+        $contacts    = WP_AI_Chatbot_Chat_Contacts::for_sessions( $session_ids );
+        $tokens      = array();
+        $analytics   = $wpdb->prefix . 'ai_chat_analytics';
+        if ( $session_ids && $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $analytics ) ) === $analytics ) {
+            $ph   = implode( ',', array_fill( 0, count( $session_ids ), '%s' ) );
+            $rows = $wpdb->get_results( $wpdb->prepare( "SELECT session_id, SUM(prompt_tokens) AS tin, SUM(completion_tokens) AS tout FROM {$analytics} WHERE session_id IN ({$ph}) GROUP BY session_id", $session_ids ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            foreach ( (array) $rows as $r ) {
+                $tokens[ $r->session_id ] = array( (int) $r->tin, (int) $r->tout );
+            }
+        }
+        $fmt = function ( $n ) {
+            return $n >= 1000000 ? round( $n / 1000000, 1 ) . 'M' : ( $n >= 1000 ? round( $n / 1000, 1 ) . 'k' : (string) $n );
+        };
+        $chats = array();
+        $named = 0;
+        $hot   = 0;
+        // 2.0.0: channel (WhatsApp), bot, AI summary and lead score of each chat.
+        $meta  = WP_AI_Chatbot_Sessions::for_sessions( $session_ids );
+        $bots  = WP_AI_Chatbot_Bots::all();
+        foreach ( $sessions as $session ) {
+            $sid   = $session->session_id;
+            $logs  = isset( $logs_by_session[ $sid ] ) ? $logs_by_session[ $sid ] : array();
+            $in    = 0;
+            $out   = 0;
+            foreach ( $logs as $log ) {
+                if ( ! WP_AI_Chatbot_Sessions::is_marker( $log->user_message ) && '' !== trim( $log->user_message ) ) {
+                    $in++;
+                }
+                if ( 0 !== strpos( $log->user_message, '[FORM_SHOWN]:' ) && 0 !== strpos( $log->user_message, '[LIVE]:' ) && '' !== trim( $log->bot_reply ) ) {
+                    $out++;
+                }
+            }
+            $m       = isset( $meta[ $sid ] ) ? $meta[ $sid ] : null;
+            $bot_id  = $m ? (string) $m->bot_id : '';
+            $hot    += ( $m && 'hot' === $m->label ) ? 1 : 0;
+            $c     = isset( $contacts[ $sid ] ) ? $contacts[ $sid ] : null;
+            $id    = strtoupper( substr( $sid, 0, 5 ) );
+            $title = $c ? ( '' !== $c->name ? $c->name : ( '' !== $c->email ? $c->email : $c->phone ) ) : 'User-' . $id;
+            $named += $c ? 1 : 0;
+            $last  = $logs ? end( $logs ) : null;
+            $t     = isset( $tokens[ $sid ] ) ? $tokens[ $sid ] : array( 0, 0 );
+            $chats[ $sid ] = array(
+                'id'      => $id,
+                'title'   => $title,
+                'contact' => $c,
+                'in'      => $in,
+                'out'     => $out,
+                'tin'     => $t[0],
+                'tout'    => $t[1],
+                'last'    => $last ? ( 0 === strpos( $last->user_message, '[AGENT]:' ) ? 'Team: ' . $last->bot_reply : ( 0 === strpos( $last->user_message, '[LIVE]:' ) ? trim( substr( $last->user_message, 7 ) ) : $last->user_message ) ) : '',
+                'when'    => $session->latest_interaction,
+                'first'   => $logs ? $logs[0]->created_at : $session->latest_interaction,
+                'initial' => $c && '' !== $c->name ? mb_strtoupper( mb_substr( $c->name, 0, 1 ) ) : '',
+                'channel' => $m ? (string) $m->channel : 'web',
+                'bot'     => '' !== $bot_id ? ( isset( $bots[ $bot_id ] ) && '' !== $bots[ $bot_id ]['name'] ? $bots[ $bot_id ]['name'] : $bot_id ) : '',
+                'label'   => $m ? (string) $m->label : '',
+                'score'   => $m ? (int) $m->score : -1,
+                'summary' => $m ? (string) $m->summary : '',
+                'intent'  => $m ? (string) $m->intent : '',
+                'mode'    => $m ? (string) $m->mode : 'bot',
+                'page'    => $m ? (string) $m->page_url : '',
+            );
+        }
+
+        ?>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.0.2/marked.min.js"></script>
+
+        <div class="wrap akdk-logs">
+            <h1>Chat History</h1>
+            <?php settings_errors(); ?>
+            <p class="akdk-logs-intro">Every conversation with your chatbot. Chats show the visitor's name once they fill a form in the chat; other chats show their ID.</p>
+            <?php
+            $tab     = isset( $_GET['tab'] ) && 'unanswered' === $_GET['tab'] ? 'unanswered' : 'chats'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            $uq_new  = WP_AI_Chatbot_Unanswered::new_count();
+            $flagged = WP_AI_Chatbot_Unanswered::flagged( $session_ids );
+            ?>
+            <nav class="akdk-logs-tabs">
+                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wp-ai-chatbot-logs' ) ); ?>" class="<?php echo 'chats' === $tab ? 'is-active' : ''; ?>">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                    Conversations
+                </a>
+                <a href="<?php echo esc_url( admin_url( 'admin.php?page=wp-ai-chatbot-logs&tab=unanswered' ) ); ?>" class="<?php echo 'unanswered' === $tab ? 'is-active' : ''; ?>">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    Unanswered questions<?php if ( $uq_new ) : ?> <span class="akdk-tab-count"><?php echo (int) $uq_new; ?></span><?php endif; ?>
+                </a>
+            </nav>
+            <style>
+                .akdk-logs-tabs { display:flex; gap:6px; margin:0 0 14px; border-bottom:1px solid #e4e4e7; }
+                .akdk-logs-tabs a { display:inline-flex; align-items:center; gap:8px; padding:10px 16px; font-size:14px; font-weight:600; color:#50575e; text-decoration:none; border-bottom:3px solid transparent; margin-bottom:-1px; }
+                .akdk-logs-tabs a:hover { color:#0a0a0a; }
+                .akdk-logs-tabs a.is-active { color:#0a0a0a; border-bottom-color:#fd9400; }
+                .akdk-logs-tabs a svg { color:#fd9400; }
+                .akdk-tab-count { background:#fd9400; color:#0a0a0a; border-radius:999px; padding:1px 8px; font-size:12px; font-weight:700; }
+                .akdk-na-tag { display:inline-flex; align-items:center; gap:4px; margin-top:6px; padding:2px 8px; border-radius:999px; background:#fef3c7; color:#92400e; font-size:11px; font-weight:700; }
+                .akdk-na-tag.is-answered { background:#dcfce7; color:#166534; }
+            </style>
+            <?php if ( 'unanswered' === $tab ) : ?>
+                <?php WP_AI_Chatbot_Unanswered::render_tab(); ?>
+        </div>
+                <?php return; ?>
+            <?php endif; ?>
+
+            <div class="akdk-logs-bar">
+                <form method="get" class="akdk-logs-filter">
+                    <input type="hidden" name="page" value="wp-ai-chatbot-logs">
+                    <span class="akdk-logs-label">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                        Date
+                    </span>
+                    <input type="date" name="start_date" value="<?php echo esc_attr( $start_date ); ?>" min="<?php echo esc_attr( $min_date ); ?>" max="<?php echo esc_attr( $max_date ); ?>" title="From date">
+                    <span class="akdk-logs-to">to</span>
+                    <input type="date" name="end_date" value="<?php echo esc_attr( $end_date ); ?>" min="<?php echo esc_attr( $min_date ); ?>" max="<?php echo esc_attr( $max_date ); ?>" title="To date">
+                    <button type="submit" class="button button-primary">Filter</button>
+                    <?php if ( ! empty( $start_date ) || ! empty( $end_date ) ) : ?>
+                        <a href="?page=wp-ai-chatbot-logs" class="button">Clear filter</a>
+                    <?php endif; ?>
+                </form>
+
+                <form method="post" class="akdk-logs-danger">
+                    <?php wp_nonce_field( 'wp_ai_clear_logs' ); ?>
+                    <button type="submit" name="clear_logs" class="button akdk-btn-danger" onclick="return confirm('Delete ALL conversations from the AK chatbot admin history? Leads and visitor browser history will NOT be deleted.');">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        Delete All Admin Chat History
+                    </button>
+                </form>
+            </div>
+
+            <?php WP_AI_Chatbot_Chat_History::render_panel(); ?>
+
+            <style>
+                .akdk-history-bulk-delete { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid #e4e4e7; background:#fff; }
+                .akdk-history-bulk-delete .button:disabled { opacity:.45; cursor:not-allowed; }
+                .akdk-si-admin-actions { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:5px 9px 2px; }
+                .akdk-history-select-label { display:inline-flex; align-items:center; gap:5px; font-size:11px; color:#646970; cursor:pointer; }
+                .akdk-history-select { margin:0 !important; }
+                .akdk-history-single-delete { margin:0; }
+                .akdk-history-single-delete .button-link-delete { color:#b32d2e; font-size:11px; text-decoration:none; }
+                .akdk-history-single-delete .button-link-delete:hover { color:#8a2424; text-decoration:underline; }
+                .akdk-history-pagination { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:12px; border-top:1px solid #e4e4e7; background:#fff; }
+                .akdk-history-page-count { color:#646970; font-size:12px; }
+                .akdk-history-pagination .page-numbers { display:inline-flex; align-items:center; justify-content:center; min-width:30px; min-height:30px; margin:0 2px; padding:0 8px; border:1px solid #dcdcde; border-radius:5px; color:#1d2327; text-decoration:none; }
+                .akdk-history-pagination .page-numbers.current { border-color:#fd9400; background:#fff4e5; color:#0a0a0a; font-weight:700; }
+                .akdk-history-pagination .page-numbers:hover { border-color:#fd9400; }
+            </style>
+            <script>
+            jQuery(function($) {
+                var $bulk = $('#akdk-history-bulk-delete');
+                function updateSelectedCount() {
+                    var count = $('.akdk-history-select:checked').length;
+                    $bulk.find('button[type=submit]').prop('disabled', count === 0);
+                    $bulk.find('.akdk-selected-count').text(count + ' selected');
+                }
+                $(document).on('change', '.akdk-history-select', updateSelectedCount);
+                $(document).on('click', '.akdk-history-select-label, .akdk-history-single-delete', function(e) { e.stopPropagation(); });
+                $bulk.on('submit', function(e) {
+                    var ids = $('.akdk-history-select:checked').map(function() { return this.value; }).get();
+                    if (!ids.length) { e.preventDefault(); return; }
+                    if (!window.confirm('Delete ' + ids.length + ' selected conversation(s) from admin history only? Leads and visitor browser histories will be kept.')) { e.preventDefault(); return; }
+                    $bulk.find('input[name="session_ids[]"]').remove();
+                    ids.forEach(function(id) { $('<input>', {type:'hidden', name:'session_ids[]', value:id}).appendTo($bulk); });
+                });
+                updateSelectedCount();
+            });
+            </script>
+            <div class="wp-ai-messenger">
+                <div class="wp-ai-sidebar">
+                    <div class="akdk-side-tools">
+                        <input type="search" class="akdk-side-search" placeholder="Search name, phone, email or message" />
+                        <div class="akdk-side-filters">
+                            <button type="button" class="akdk-chip is-active" data-show="all">All <span><?php echo count( $chats ); ?></span></button>
+                            <button type="button" class="akdk-chip" data-show="named">With name <span><?php echo (int) $named; ?></span></button>
+                            <button type="button" class="akdk-chip" data-show="anon">IDs only <span><?php echo count( $chats ) - (int) $named; ?></span></button>
+                            <button type="button" class="akdk-chip" data-show="hot">Hot leads <span><?php echo (int) $hot; ?></span></button>
+                        </div>
+                        <div class="akdk-side-sort">
+                            <select class="akdk-sort" aria-label="Sort chats">
+                                <option value="new">Newest first</option>
+                                <option value="score">Hot leads first (lead score)</option>
+                            </select>
+                            <?php if ( '1' === (string) WP_AI_Chatbot_Insights::settings()['enabled'] ) : ?>
+                                <button type="button" class="button button-small akdk-summarize" data-nonce="<?php echo esc_attr( wp_create_nonce( 'wp_ai_insights' ) ); ?>" title="AI summary and lead score for chats that do not have one yet">Summarize now</button>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <form method="post" class="akdk-history-bulk-delete" id="akdk-history-bulk-delete">
+                        <?php wp_nonce_field( 'wp_ai_delete_chat_history' ); ?>
+                        <button type="submit" name="delete_selected_sessions" value="1" class="button akdk-btn-danger" disabled>Delete Selected</button>
+                        <span class="description akdk-selected-count">0 selected</span>
+                    </form>
+                    <div class="akdk-side-list">
+                    <?php if ( empty( $chats ) ) : ?>
+                        <div class="akdk-side-empty">No chats found for this date range.</div>
+                    <?php else : ?>
+                        <?php foreach ( $chats as $sid => $ch ) :
+                            $c      = $ch['contact'];
+                            $search = strtolower( $ch['title'] . ' ' . $ch['id'] . ' ' . ( $c ? $c->email . ' ' . $c->phone . ' ' . $c->name : '' ) . ' ' . $ch['last'] );
+                        ?>
+                            <div class="wp-ai-sidebar-item" data-session="<?php echo esc_attr( $sid ); ?>" data-named="<?php echo $c ? '1' : '0'; ?>" data-label="<?php echo esc_attr( $ch['label'] ); ?>" data-score="<?php echo (int) $ch['score']; ?>" data-when="<?php echo esc_attr( (string) strtotime( $ch['when'] ) ); ?>" data-search="<?php echo esc_attr( $search . ' ' . strtolower( $ch['summary'] . ' ' . $ch['intent'] ) ); ?>">
+                                <div class="akdk-si-admin-actions">
+                                    <label class="akdk-history-select-label" title="Select conversation for bulk deletion">
+                                        <input type="checkbox" class="akdk-history-select" value="<?php echo esc_attr( $sid ); ?>" />
+                                        <span>Select</span>
+                                    </label>
+                                    <form method="post" class="akdk-history-single-delete">
+                                        <?php wp_nonce_field( 'wp_ai_delete_chat_history' ); ?>
+                                        <input type="hidden" name="session_id" value="<?php echo esc_attr( $sid ); ?>" />
+                                        <button type="submit" name="delete_chat_session" value="1" class="button-link-delete" onclick="event.stopPropagation(); return confirm('Delete this conversation from the admin history only? Lead records and visitor browser history will be kept.');">Delete</button>
+                                    </form>
+                                </div>
+                                <div class="akdk-si-top">
+                                    <span class="akdk-avatar<?php echo $c ? ' is-named' : ''; ?>"><?php echo $ch['initial'] ? esc_html( $ch['initial'] ) : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'; ?></span>
+                                    <div class="akdk-si-head">
+                                        <h4 title="<?php echo esc_attr( $ch['title'] ); ?>"><?php echo esc_html( $ch['title'] ); ?></h4>
+                                        <span class="akdk-si-sub"><?php echo $c ? esc_html( trim( ( '' !== $c->name && '' !== $c->phone ? $c->phone : ( '' !== $c->name ? $c->email : '' ) ) ) ?: 'Lead' ) : 'ID ' . esc_html( $ch['id'] ); ?></span>
+                                    </div>
+                                    <span class="akdk-io" title="Visitor messages (In) / bot replies (Out)"><b>I</b> <?php echo (int) $ch['in']; ?> <i></i> <b>O</b> <?php echo (int) $ch['out']; ?></span>
+                                </div>
+                                <p class="akdk-si-last"><?php echo esc_html( mb_strimwidth( 0 === strpos( $ch['last'], '[SYSTEM_ACTION]:' ) ? '✅ ' . substr( $ch['last'], 17 ) : $ch['last'], 0, 60, '…' ) ); ?></p>
+                                <?php if ( 'web' !== $ch['channel'] || '' !== $ch['bot'] || '' !== $ch['label'] || 'bot' !== $ch['mode'] ) : ?>
+                                    <div class="akdk-si-tags">
+                                        <?php if ( '' !== $ch['label'] ) : ?><span class="akdk-tag <?php echo esc_attr( $ch['label'] ); ?>" title="Lead score <?php echo (int) $ch['score']; ?>/100"><?php echo esc_html( ucfirst( $ch['label'] ) . ' ' . (int) $ch['score'] ); ?></span><?php endif; ?>
+                                        <?php if ( 'whatsapp' === $ch['channel'] ) : ?><span class="akdk-tag whatsapp">WhatsApp</span><?php endif; ?>
+                                        <?php if ( 'waiting' === $ch['mode'] ) : ?><span class="akdk-tag waiting">Waiting for a person</span><?php elseif ( 'human' === $ch['mode'] ) : ?><span class="akdk-tag human">Team</span><?php endif; ?>
+                                        <?php if ( '' !== $ch['bot'] ) : ?><span class="akdk-tag bot"><?php echo esc_html( $ch['bot'] ); ?></span><?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
+                                <div class="akdk-si-foot">
+                                    <span class="akdk-si-time"><?php echo esc_html( date( 'D, d M Y · h:i A', strtotime( $ch['when'] ) ) ); ?></span>
+                                    <span class="akdk-si-tok" title="Tokens: input / output"><?php echo esc_html( $fmt( $ch['tin'] ) . ' in · ' . $fmt( $ch['tout'] ) . ' out' ); ?></span>
+                                </div>
+                                <?php if ( $c ) : ?><span class="akdk-lead-badge">Lead</span><?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                        <div class="akdk-side-empty akdk-side-nomatch" hidden>No chat matches your search.</div>
+                    <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="wp-ai-chat-area">
+                    <div class="wp-ai-chat-header">
+                        <div class="akdk-ch-empty" id="wp-ai-active-user-title">Select a chat to view it</div>
+                        <?php foreach ( $chats as $sid => $ch ) :
+                            $c = $ch['contact'];
+                        ?>
+                            <div class="akdk-ch" data-for="<?php echo esc_attr( $sid ); ?>" hidden>
+                                <div class="akdk-ch-who">
+                                    <span class="akdk-avatar akdk-avatar-lg<?php echo $c ? ' is-named' : ''; ?>"><?php echo $ch['initial'] ? esc_html( $ch['initial'] ) : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'; ?></span>
+                                    <div>
+                                        <div class="akdk-ch-name"><?php echo esc_html( $ch['title'] ); ?> <?php if ( $c ) : ?><span class="akdk-lead-badge is-inline">Lead</span><?php endif; ?></div>
+                                        <div class="akdk-ch-meta">
+                                            <?php if ( $c && '' !== $c->phone ) : ?><a href="tel:<?php echo esc_attr( preg_replace( '/[^\d+]/', '', $c->phone ) ); ?>">📞 <?php echo esc_html( $c->phone ); ?></a><?php endif; ?>
+                                            <?php if ( $c && '' !== $c->email ) : ?><a href="mailto:<?php echo esc_attr( $c->email ); ?>">✉️ <?php echo esc_html( $c->email ); ?></a><?php endif; ?>
+                                            <?php if ( $c && '' !== $c->form_id ) : ?><a href="<?php echo esc_url( admin_url( 'admin.php?page=wp-ai-chatbot-leads&form_tab=' . rawurlencode( $c->form_id ) ) ); ?>">📋 <?php echo esc_html( '' !== $c->form_title ? $c->form_title : 'View lead' ); ?></a><?php endif; ?>
+                                            <span>ID <?php echo esc_html( $ch['id'] ); ?></span>
+                                            <?php if ( 'whatsapp' === $ch['channel'] ) : ?><span class="akdk-tag whatsapp">WhatsApp</span><?php endif; ?>
+                                            <?php if ( '' !== $ch['bot'] ) : ?><span>Bot: <?php echo esc_html( $ch['bot'] ); ?></span><?php endif; ?>
+                                            <?php if ( '' !== $ch['page'] ) : ?><a href="<?php echo esc_url( $ch['page'] ); ?>" target="_blank" rel="noopener">🔗 <?php echo esc_html( wp_parse_url( $ch['page'], PHP_URL_PATH ) ?: '/' ); ?></a><?php endif; ?>
+                                            <?php if ( WP_AI_Chatbot_Live_Chat::enabled() ) : ?><a href="<?php echo esc_url( admin_url( 'admin.php?page=' . WP_AI_Chatbot_Live_Chat::PAGE . '&chat=' . rawurlencode( $sid ) ) ); ?>">💬 Reply in Live Chat</a><?php endif; ?>
+                                            <span>Started <?php echo esc_html( date( 'd M Y, h:i A', strtotime( $ch['first'] ) ) ); ?></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <?php if ( '' !== $ch['summary'] ) : ?>
+                                    <div class="akdk-ch-summary">
+                                        <?php if ( '' !== $ch['label'] ) : ?><span class="akdk-tag <?php echo esc_attr( $ch['label'] ); ?>"><?php echo esc_html( ucfirst( $ch['label'] ) . ' lead · ' . (int) $ch['score'] . '/100' ); ?></span><?php endif; ?>
+                                        <?php if ( '' !== $ch['intent'] ) : ?><span class="akdk-tag intent"><?php echo esc_html( $ch['intent'] ); ?></span><?php endif; ?>
+                                        <span class="akdk-ch-summary-text"><?php echo esc_html( $ch['summary'] ); ?></span>
+                                    </div>
+                                <?php endif; ?>
+                                <div class="akdk-ch-stats">
+                                    <div class="akdk-stat"><span>Input messages</span><strong><?php echo (int) $ch['in']; ?></strong></div>
+                                    <div class="akdk-stat"><span>Output messages</span><strong><?php echo (int) $ch['out']; ?></strong></div>
+                                    <div class="akdk-stat"><span>Input tokens</span><strong title="<?php echo esc_attr( number_format( $ch['tin'] ) ); ?>"><?php echo esc_html( $fmt( $ch['tin'] ) ); ?></strong></div>
+                                    <div class="akdk-stat"><span>Output tokens</span><strong title="<?php echo esc_attr( number_format( $ch['tout'] ) ); ?>"><?php echo esc_html( $fmt( $ch['tout'] ) ); ?></strong></div>
+                                    <div class="akdk-stat is-total"><span>Total tokens</span><strong title="<?php echo esc_attr( number_format( $ch['tin'] + $ch['tout'] ) ); ?>"><?php echo esc_html( $fmt( $ch['tin'] + $ch['tout'] ) ); ?></strong></div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php if ( $total_pages > 1 ) : ?>
+                        <div class="akdk-history-pagination" aria-label="Chat history pages">
+                            <span class="akdk-history-page-count">
+                                Showing <?php echo (int) ( ( $current_page - 1 ) * $per_page + 1 ); ?>–<?php echo (int) min( $current_page * $per_page, $total_sessions ); ?> of <?php echo (int) $total_sessions; ?> conversations
+                            </span>
+                            <?php
+                            echo wp_kses_post( paginate_links( array(
+                                'base'      => add_query_arg( 'chat_page', '%#%', admin_url( 'admin.php?page=wp-ai-chatbot-logs' ) ),
+                                'format'    => '',
+                                'current'   => $current_page,
+                                'total'     => $total_pages,
+                                'prev_text' => '&laquo; Previous',
+                                'next_text' => 'Next &raquo;',
+                                'type'      => 'plain',
+                                'add_args'  => array_filter( array(
+                                    'start_date' => $start_date,
+                                    'end_date'   => $end_date,
+                                ) ),
+                            ) ) );
+                            ?>
+                        </div>
+                    <?php elseif ( $total_sessions > 0 ) : ?>
+                        <div class="akdk-history-pagination akdk-history-page-count">
+                            Showing <?php echo (int) $total_sessions; ?> of <?php echo (int) $total_sessions; ?> conversations
+                        </div>
+                    <?php endif; ?>
+
+                    <div class="wp-ai-chat-container-wrapper">
+                        <?php if (!empty($sessions)): foreach($sessions as $session): ?>
+                            <div class="wp-ai-chat-messages" id="chat-<?php echo esc_attr($session->session_id); ?>">
+                                <?php 
+                                    $last_date = ''; 
+                                    
+                                    foreach($logs_by_session[$session->session_id] as $log): 
+                                        $current_date = date('Y-m-d', strtotime($log->created_at));
+                                        
+                                        if ($current_date !== $last_date) {
+                                            $date_label = $this->get_whatsapp_date_label($log->created_at);
+                                            echo '<div class="chat-date-divider"><span>' . esc_html($date_label) . '</span></div>';
+                                            $last_date = $current_date;
+                                        }
+
+                                        $is_form_event = strpos( $log->user_message, '[FORM_SHOWN]:' ) === 0;
+                                        $is_system = strpos($log->user_message, '[SYSTEM_ACTION]:') === 0;
+                                        $is_agent  = 0 === strpos( $log->user_message, '[AGENT]:' );
+                                        $is_live   = 0 === strpos( $log->user_message, '[LIVE]:' );
+                                        $formatted_time = date('h:i A', strtotime($log->created_at));
+                                ?>
+                                    
+                                    <?php if ( $is_agent ) : ?>
+                                        <div class="chat-bubble chat-bot chat-agent">
+                                            <span class="chat-agent-name"><?php echo esc_html( substr( $log->user_message, 8 ) ); ?> (team)</span>
+                                            <div class="wp-ai-raw-markdown" style="display:none;"><?php echo esc_html( $log->bot_reply ); ?></div>
+                                            <div class="wp-ai-rendered-content"></div>
+                                            <span class="chat-time"><?php echo esc_html( $formatted_time ); ?></span>
+                                        </div>
+                                    <?php elseif ( $is_live ) : ?>
+                                        <div class="chat-bubble chat-system">
+                                            💬 <?php echo esc_html( trim( substr( $log->user_message, 7 ) ) ); ?>
+                                            <span class="chat-time"><?php echo esc_html( $formatted_time ); ?></span>
+                                        </div>
+                                        <?php if ( '' !== trim( $log->bot_reply ) ) : ?>
+                                        <div class="chat-bubble chat-bot">
+                                            <div class="wp-ai-raw-markdown" style="display:none;"><?php echo esc_html( $log->bot_reply ); ?></div>
+                                            <div class="wp-ai-rendered-content"></div>
+                                            <span class="chat-time"><?php echo esc_html( $formatted_time ); ?></span>
+                                        </div>
+                                        <?php endif; ?>
+                                    <?php elseif ( $is_form_event ) : ?>
+                                        <div class="chat-bubble chat-system">
+                                            📋 <?php echo esc_html( 'Form shown: ' . $log->bot_reply ); ?>
+                                            <span class="chat-time"><?php echo esc_html( $formatted_time ); ?></span>
+                                        </div>
+                                    <?php elseif($is_system): ?>
+                                        <div class="chat-bubble chat-system">
+                                            ✅ <?php echo esc_html(str_replace('[SYSTEM_ACTION]: ', '', $log->user_message)); ?>
+                                            <span class="chat-time"><?php echo $formatted_time; ?></span>
+                                        </div>
+                                        <div class="chat-bubble chat-bot">
+                                            <div class="wp-ai-raw-markdown" style="display:none;"><?php echo esc_html($log->bot_reply); ?></div>
+                                            <div class="wp-ai-rendered-content"></div>
+                                            <span class="chat-time"><?php echo $formatted_time; ?></span>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="chat-bubble chat-user">
+                                            <?php echo esc_html($log->user_message); ?>
+                                            <span class="chat-time" style="color: rgba(255,255,255,0.8);"><?php echo $formatted_time; ?></span>
+                                        </div>
+                                        
+                                        <?php $na = isset( $flagged[ $session->session_id . '|' . WP_AI_Chatbot_Unanswered::hash( $log->user_message ) ] ) ? $flagged[ $session->session_id . '|' . WP_AI_Chatbot_Unanswered::hash( $log->user_message ) ] : ''; ?>
+                                        <?php if ( '' !== trim( $log->bot_reply ) ) : // Empty while a team member handled the chat. ?>
+                                        <div class="chat-bubble chat-bot">
+                                            <div class="wp-ai-raw-markdown" style="display:none;"><?php echo esc_html($log->bot_reply); ?></div>
+                                            <div class="wp-ai-rendered-content"></div>
+                                            <?php if ( $na ) : ?><a class="akdk-na-tag<?php echo 'answered' === $na ? ' is-answered' : ''; ?>" href="<?php echo esc_url( admin_url( 'admin.php?page=wp-ai-chatbot-logs&tab=unanswered&uq=' . ( 'answered' === $na ? 'answered' : ( 'ignored' === $na ? 'ignored' : 'new' ) ) ) ); ?>"><?php echo 'answered' === $na ? '✓ Answer added' : ( 'ignored' === $na ? 'Not answered (ignored)' : '⚠ Not answered' ); ?></a><?php endif; ?>
+                                            <span class="chat-time"><?php echo $formatted_time; ?></span>
+                                        </div>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                    
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endforeach; endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <style>
+            .akdk-logs h1 { font-size: 23px; font-weight: 700; }
+            .akdk-logs-intro { color: #50575e; margin: 4px 0 14px; }
+            .akdk-logs-bar { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; background: #fff; padding: 14px 20px; border: 1px solid #e7e7ea; border-radius: 12px; margin-bottom: 15px; }
+            .akdk-logs-filter { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0; }
+            .akdk-logs-label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #1d2327; }
+            .akdk-logs-label svg { color: #fd9400; }
+            .akdk-logs-filter input[type=date] { height: 36px; border-radius: 8px; border: 1px solid #c3c4c7; padding: 0 10px; }
+            .akdk-logs-filter .button { height: 36px; line-height: 34px; border-radius: 8px; }
+            .akdk-logs-to { color: #8c8f94; font-weight: 600; }
+            .akdk-logs-danger { margin: 0; }
+            .akdk-logs .akdk-btn-danger.button { display: inline-flex; align-items: center; gap: 6px; height: 36px; color: #d63638 !important; border-color: #d63638 !important; border-radius: 8px; background: #fff !important; }
+            .akdk-logs .akdk-btn-danger.button:hover { background: #fef2f2 !important; color: #b91c1c !important; border-color: #b91c1c !important; }
+
+            .wp-ai-messenger { display: flex; height: 680px; background: #fff; border: 1px solid #e7e7ea; border-radius: 12px; overflow: hidden; }
+            .wp-ai-sidebar { width: 340px; flex-shrink: 0; border-right: 1px solid #e7e7ea; background: #fafafa; display: flex; flex-direction: column; min-height: 0; }
+            .akdk-side-tools { padding: 12px; border-bottom: 1px solid #e7e7ea; background: #fff; }
+            .akdk-side-search { width: 100%; height: 36px; border-radius: 8px; border: 1px solid #d4d4d8; padding: 0 12px; }
+            .akdk-side-filters { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+            .akdk-chip { border: 1px solid #e4e4e7; background: #fff; border-radius: 999px; padding: 3px 10px; font-size: 12px; cursor: pointer; color: #3f3f46; }
+            .akdk-chip span { color: #a1a1aa; margin-left: 2px; }
+            .akdk-chip.is-active { background: #0a0a0a; border-color: #0a0a0a; color: #fff; }
+            .akdk-chip.is-active span { color: #fd9400; }
+            .akdk-side-list { overflow-y: auto; flex: 1; min-height: 0; }
+            .akdk-side-empty { padding: 24px; text-align: center; color: #71717a; }
+            .wp-ai-sidebar-item { position: relative; padding: 12px 14px; border-bottom: 1px solid #efeff1; border-left: 3px solid transparent; cursor: pointer; transition: background-color .15s ease; }
+            .wp-ai-sidebar-item:hover { background: #f4f4f5; }
+            .wp-ai-sidebar-item.active { background: #fff4e5; border-left-color: #fd9400; }
+            .akdk-si-top { display: flex; align-items: center; gap: 10px; }
+            .akdk-avatar { flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; background: #e4e4e7; color: #52525b; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
+            .akdk-avatar.is-named { background: #fd9400; color: #0a0a0a; }
+            .akdk-avatar-lg { width: 42px; height: 42px; font-size: 17px; }
+            .akdk-si-head { min-width: 0; flex: 1; }
+            .wp-ai-sidebar-item h4 { margin: 0; color: #0a0a0a; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .akdk-si-sub { display: block; font-size: 11.5px; color: #71717a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .akdk-io { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; color: #3f3f46; background: #fff; border: 1px solid #e4e4e7; border-radius: 999px; padding: 2px 8px; }
+            .akdk-io b { color: #fd9400; font-weight: 800; }
+            .akdk-io i { width: 1px; height: 10px; background: #d4d4d8; margin: 0 2px; }
+            .akdk-si-last { margin: 6px 0 4px 44px; font-size: 13px; color: #3f3f46; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .akdk-si-foot { display: flex; justify-content: space-between; gap: 6px; margin-left: 44px; font-size: 11px; color: #71717a; font-weight: 600; }
+            .akdk-si-tok { color: #a35a00; white-space: nowrap; }
+            .akdk-lead-badge { position: absolute; top: 4px; right: 14px; font-size: 9.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: #15803d; display: none; }
+            .akdk-si-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 4px 44px; }
+            .akdk-tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; background: #f4f4f5; color: #3f3f46; }
+            .akdk-tag.hot { background: #fee2e2; color: #b91c1c; } .akdk-tag.warm { background: #ffedd5; color: #c2410c; } .akdk-tag.cold { background: #e0f2fe; color: #0369a1; }
+            .akdk-tag.whatsapp { background: #dcfce7; color: #166534; } .akdk-tag.waiting { background: #fde68a; color: #92400e; } .akdk-tag.human { background: #dbeafe; color: #1e40af; }
+            .akdk-tag.bot { background: #f3e8ff; color: #6b21a8; text-transform: none; } .akdk-tag.intent { text-transform: none; }
+            .akdk-side-sort { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+            .akdk-side-sort select { flex: 1; min-width: 0; height: 30px; font-size: 12px; border-radius: 8px; }
+            .akdk-ch-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; padding: 8px 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; font-size: 13px; color: #3f3f46; }
+            .akdk-ch-summary-text { flex: 1 1 260px; }
+            .chat-agent { border-left: 3px solid #fd9400 !important; }
+            .chat-agent-name { display: block; font-size: 11px; font-weight: 700; color: #a35a00; text-transform: uppercase; letter-spacing: .3px; margin-bottom: 3px; }
+            .akdk-lead-badge.is-inline { position: static; display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: #dcfce7; vertical-align: middle; }
+
+            .wp-ai-chat-area { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; position: relative;
+                background-color: #f6f6f7; background-image: radial-gradient(#e4e4e7 1px, transparent 1px); background-size: 18px 18px; }
+            .wp-ai-chat-header { padding: 14px 20px; background: #fff; border-bottom: 1px solid #e7e7ea; z-index: 10; }
+            .akdk-ch-empty { font-weight: 700; font-size: 15px; color: #71717a; }
+            .akdk-ch-who { display: flex; align-items: center; gap: 12px; }
+            .akdk-ch-name { font-weight: 700; font-size: 16px; color: #0a0a0a; }
+            .akdk-ch-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 3px; font-size: 12.5px; color: #71717a; }
+            .akdk-ch-meta a { color: #a35a00; text-decoration: none; font-weight: 600; }
+            .akdk-ch-meta a:hover { text-decoration: underline; }
+            .akdk-ch-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+            .akdk-stat { background: #fafafa; border: 1px solid #ececef; border-radius: 10px; padding: 8px 10px; }
+            .akdk-stat span { display: block; font-size: 11px; color: #71717a; font-weight: 600; }
+            .akdk-stat strong { display: block; font-size: 18px; color: #0a0a0a; margin-top: 2px; }
+            .akdk-stat.is-total { background: #fff4e5; border-color: #ffd59e; }
+            .akdk-stat.is-total strong { color: #a35a00; }
+            .wp-ai-chat-container-wrapper { flex-grow: 1; position: relative; overflow: hidden; }
+            .wp-ai-chat-messages { height: 100%; padding: 20px; overflow-y: auto; display: none; flex-direction: column; position: absolute; width: 100%; box-sizing: border-box; }
+            .wp-ai-chat-messages.active { display: flex; }
+
+            .chat-date-divider { text-align: center; margin: 10px 0 15px; position: sticky; top: 5px; z-index: 100; display: flex; justify-content: center; width: 100%; pointer-events: none; }
+            .chat-date-divider span { background: #0a0a0a; color: #fff; font-size: 11.5px; font-weight: 600; padding: 5px 14px; border-radius: 999px; display: inline-block; letter-spacing: .3px; }
+
+            .chat-bubble { max-width: 75%; padding: 10px 14px; border-radius: 14px; margin-bottom: 12px; font-size: 14px; position: relative; line-height: 1.5; }
+            .chat-user { background: #0a0a0a; align-self: flex-end; border-bottom-right-radius: 4px; color: #fff; }
+            .chat-bot { background: #fff; align-self: flex-start; border-bottom-left-radius: 4px; color: #1d1d1f; border: 1px solid #e7e7ea; }
+            .chat-system { background: #fff4e5; color: #8a4b00; align-self: center; font-size: 13px; font-weight: 700; border-radius: 12px; text-align: center; border: 1px solid #ffd59e; max-width: 90%; }
+            .chat-time { display: block; font-size: 10px; margin-top: 5px; text-align: right; opacity: .65; }
+            .chat-user .chat-time { color: #fd9400; opacity: 1; }
+            .chat-bot .chat-time { color: #71717a; }
+
+            .wp-ai-rendered-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 5px 0; display: block; }
+            .wp-ai-rendered-content p { margin: 0 0 10px; }
+            .wp-ai-rendered-content p:last-child { margin-bottom: 0; }
+            .wp-ai-rendered-content a { color: #a35a00; text-decoration: underline; font-weight: 600; }
+            .wp-ai-rendered-content h1, .wp-ai-rendered-content h2, .wp-ai-rendered-content h3 { margin: 10px 0 5px; color: #0a0a0a; font-size: 16px; }
+            .wp-ai-rendered-content ul, .wp-ai-rendered-content ol { margin-top: 0; padding-left: 20px; }
+
+            @media (max-width: 782px) {
+                .wp-ai-messenger { flex-direction: column; height: auto; }
+                .wp-ai-sidebar { width: 100%; max-height: 360px; border-right: none; border-bottom: 1px solid #e7e7ea; }
+                .akdk-ch-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+                .wp-ai-chat-area { min-height: 520px; }
+                .chat-bubble { max-width: 88%; }
+            }
+        </style>
+
+        <script>
+        var wpAiAdminForms = <?php echo wp_json_encode($multi_forms); ?>;
+
+        function generateDisabledFormHTML(formId) {
+            if (!wpAiAdminForms || wpAiAdminForms.length === 0) return '<div style="color:red; font-size:12px;">[Form data unavailable]</div>';
+            
+            var form = wpAiAdminForms.find(f => f.id == formId);
+            if (!form) return '<div style="color:red; font-size:12px;">[Requested form not found in settings]</div>';
+            var esc = function (t) { return String(t || '').replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+            if (form.source && form.source !== 'builtin') {
+                var types = { link: 'External link / checkout', embed: 'Embedded page', shortcode: 'WordPress form', html: 'Embed code' };
+                return '<div style="background:#fff4e5; padding:12px 14px; border-radius:10px; border:1px solid #ffd59e; margin:10px 0; font-size:13px;"><strong>' + esc(form.title) + '</strong><br><span style="color:#8a4b00;">' + esc(types[form.source] || 'External form') + ' was shown to the visitor.</span></div>';
+            }
+
+            var html = '<div style="background:#f9f9f9; padding:15px; border-radius:8px; border:1px solid #ddd; margin:10px 0; text-align:left; opacity: 0.9;">';
+            html += '<h4 style="margin-top:0; margin-bottom:10px; font-size:14px; color:#333; display:flex; justify-content:space-between; align-items:center;">' + 
+                        esc(form.title) + 
+                        '<span style="font-size:10px; background:#fff4e5; color:#8a4b00; padding:2px 6px; border-radius:4px; border:1px solid #ffd59e; font-weight:normal;">Preview Mode (Disabled)</span>' +
+                    '</h4>';
+            
+            if (form.fields && Array.isArray(form.fields)) {
+                form.fields.forEach((field) => {
+                    var req = field.required === 'yes' ? '<span style="color:red;">*</span>' : '';
+                    html += '<div style="margin-bottom:10px;">';
+                    html += '<label style="display:block; font-size:12px; margin-bottom:4px; color:#555; font-weight:600;">' + esc(field.label) + ' ' + req + '</label>';
+                    
+                    if (field.type === 'textarea') {
+                        html += '<textarea disabled style="width:100%; padding:6px; border:1px solid #ccc; border-radius:4px; background:#e9ecef; color:#666; resize:none;"></textarea>';
+                    } else if (field.type === 'select' || field.type === 'multiselect') {
+                        html += '<select disabled style="width:100%; padding:6px; border:1px solid #ccc; border-radius:4px; background:#e9ecef; color:#666;"><option>Select an option...</option></select>';
+                    } else {
+                        html += '<input type="' + ((field.type === 'email' || field.type === 'tel' || field.type === 'number') ? field.type : 'text') + '" disabled style="width:100%; padding:6px; border:1px solid #ccc; border-radius:4px; background:#e9ecef; color:#666;" />';
+                    }
+                    html += '</div>';
+                });
+            }
+            
+            html += '<button disabled style="width:100%; background:#fd9400; color:#0a0a0a; opacity:.55; border:none; padding:10px; border-radius:8px; font-weight:bold; cursor:not-allowed;">Submit</button>';
+            html += '</div>';
+            
+            return html;
+        }
+
+        /* Allowlist HTML sanitizer for untrusted (AI/Markdown) output. No dependencies. */
+        function wpAiSanitizeHtml(html) {
+            var ALLOWED = {P:1,BR:1,B:1,STRONG:1,I:1,EM:1,U:1,S:1,DEL:1,UL:1,OL:1,LI:1,H1:1,H2:1,H3:1,H4:1,H5:1,H6:1,A:1,IMG:1,TABLE:1,THEAD:1,TBODY:1,TR:1,TH:1,TD:1,BLOCKQUOTE:1,CODE:1,PRE:1,SPAN:1,DIV:1,HR:1};
+            var DROP = {SCRIPT:1,STYLE:1,IFRAME:1,OBJECT:1,EMBED:1,FORM:1,INPUT:1,BUTTON:1,TEXTAREA:1,SELECT:1,LINK:1,META:1,SVG:1,MATH:1,BASE:1,TEMPLATE:1,NOSCRIPT:1};
+            var ATTRS = {A:['href','title'],IMG:['src','alt','title'],TD:['colspan','rowspan'],TH:['colspan','rowspan']};
+            function safeUrl(v, isImg) {
+                v = String(v).replace(/[\u0000-\u0020\u007f-\u009f]/g, '');
+                if (/^(https?:|mailto:|tel:)/i.test(v)) return !isImg || /^https?:/i.test(v);
+                if (/^[a-z][a-z0-9+.\-]*:/i.test(v)) return false;
+                return true;
+            }
+            var doc = new DOMParser().parseFromString('<body>' + html, 'text/html');
+            (function clean(node) {
+                Array.prototype.slice.call(node.childNodes).forEach(function(ch) {
+                    if (ch.nodeType === 3) return;
+                    if (ch.nodeType !== 1) { node.removeChild(ch); return; }
+                    var tag = ch.tagName;
+                    if (DROP[tag]) { node.removeChild(ch); return; }
+                    if (!ALLOWED[tag]) { clean(ch); while (ch.firstChild) node.insertBefore(ch.firstChild, ch); node.removeChild(ch); return; }
+                    var keep = ATTRS[tag] || [];
+                    Array.prototype.slice.call(ch.attributes).forEach(function(a) {
+                        var n = a.name.toLowerCase();
+                        if (keep.indexOf(n) === -1) { ch.removeAttribute(a.name); return; }
+                        if ((n === 'href' || n === 'src') && !safeUrl(a.value, n === 'src')) ch.removeAttribute(a.name);
+                    });
+                    if (tag === 'A') { ch.setAttribute('rel', 'noopener noreferrer nofollow'); ch.setAttribute('target', '_blank'); }
+                    if (tag === 'IMG') { ch.setAttribute('referrerpolicy', 'no-referrer'); ch.setAttribute('loading', 'lazy'); }
+                    clean(ch);
+                });
+            })(doc.body);
+            return doc.body.innerHTML;
+        }
+        function wpAiEscapeHtml(s) { return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+        function wpAiRenderBotHtml(rawText, formHtmlFn, imgMax) {
+            var forms = [];
+            rawText = String(rawText).replace(/\[SHOW_FORM_([a-zA-Z0-9_]+)\]/g, function(m, id) { forms.push(id); return 'WPAIFORMPH' + (forms.length - 1) + 'X'; });
+            var html;
+            if (typeof marked !== 'undefined') { marked.setOptions({ gfm: true, breaks: true }); html = marked.parse(rawText); }
+            else { html = wpAiEscapeHtml(rawText).replace(/\n/g, '<br>'); }
+            var box = document.createElement('div');
+            box.innerHTML = wpAiSanitizeHtml(html);
+            Array.prototype.forEach.call(box.querySelectorAll('a'), function(a) {
+                var h = a.getAttribute('href') || '';
+                if (/^https?:\/\/\S+\.(jpg|jpeg|png|gif)$/i.test(h) && a.textContent.trim() === h) {
+                    var img = document.createElement('img'); img.setAttribute('src', h); img.setAttribute('alt', ''); a.parentNode.replaceChild(img, a);
+                }
+            });
+            Array.prototype.forEach.call(box.querySelectorAll('img'), function(i) {
+                i.style.maxWidth = imgMax || '250px'; i.style.height = 'auto'; i.style.borderRadius = '6px'; i.style.display = 'block'; i.style.margin = '5px 0';
+            });
+            return box.innerHTML.replace(/WPAIFORMPH(\d+)X/g, function(m, i) { return (formHtmlFn && forms[i] !== undefined) ? formHtmlFn(forms[i]) : ''; });
+        }
+        
+
+        jQuery(document).ready(function($) {
+            
+            $('.chat-bot').each(function() {
+                var rawText = $(this).find('.wp-ai-raw-markdown').text();
+                // Untrusted model output: sanitized allowlist render; trusted disabled-form preview is injected after sanitizing.
+                $(this).find('.wp-ai-rendered-content').html(wpAiRenderBotHtml(rawText, generateDisabledFormHTML, '250px'));
+            });
+
+            $('.wp-ai-sidebar-item').on('click', function() {
+                var sessionId = $(this).data('session');
+                $('.wp-ai-sidebar-item').removeClass('active');
+                $(this).addClass('active');
+
+                $('#wp-ai-active-user-title').prop('hidden', true);
+                $('.akdk-ch').prop('hidden', true).filter(function () { return $(this).data('for') === sessionId; }).prop('hidden', false);
+
+                $('.wp-ai-chat-messages').removeClass('active');
+                var activeChat = $('#chat-' + sessionId);
+                activeChat.addClass('active');
+                if (activeChat[0]) activeChat.scrollTop(activeChat[0].scrollHeight);
+            });
+
+            // Search and "With name / IDs only".
+            var show = 'all';
+            function filterChats() {
+                var q = $.trim($('.akdk-side-search').val() || '').toLowerCase(), shown = 0;
+                $('.wp-ai-sidebar-item').each(function () {
+                    var named = $(this).data('named') === 1 || $(this).data('named') === '1';
+                    var ok = (show === 'all' || (show === 'hot' ? String($(this).data('label')) === 'hot' : (show === 'named' ? named : !named))) && (!q || String($(this).data('search')).indexOf(q) !== -1);
+                    $(this).toggle(ok); if (ok) shown++;
+                });
+                $('.akdk-side-nomatch').prop('hidden', shown > 0);
+            }
+            $('.akdk-side-search').on('input', filterChats);
+            $('.akdk-sort').on('change', function () {
+                var by = $(this).val(), $list = $('.akdk-side-list'), $items = $list.children('.wp-ai-sidebar-item').get();
+                $items.sort(function (a, b) {
+                    if (by === 'score') { var d = (parseInt($(b).data('score'), 10) || -1) - (parseInt($(a).data('score'), 10) || -1); if (d) return d; }
+                    return (parseInt($(b).data('when'), 10) || 0) - (parseInt($(a).data('when'), 10) || 0);
+                });
+                $.each($items, function (_, el) { $list.find('.akdk-side-nomatch').before(el); });
+            });
+            $('.akdk-summarize').on('click', function () {
+                var $b = $(this).prop('disabled', true).text('Summarizing…');
+                $.post(ajaxurl, { action: 'wp_ai_insights_now', security: $b.data('nonce') }).done(function (r) {
+                    var msg = r && r.data ? (r.data.message || r.data) : 'Done.';
+                    $b.text(String(msg).slice(0, 60));
+                    if (r && r.success && r.data && r.data.done) { setTimeout(function () { window.location.reload(); }, 900); }
+                    else { setTimeout(function () { $b.prop('disabled', false).text('Summarize now'); }, 3500); }
+                }).fail(function () { $b.prop('disabled', false).text('Summarize now'); });
+            });
+            $('.akdk-chip').on('click', function () {
+                $('.akdk-chip').removeClass('is-active'); $(this).addClass('is-active');
+                show = $(this).data('show'); filterChats();
+            });
+
+            var want = new URLSearchParams(window.location.search).get('chat');
+            var $want = want ? $('.wp-ai-sidebar-item').filter(function () { return String($(this).data('session')) === want; }) : $();
+            if ($want.length) {
+                $want.first().click();
+                var list = $('.akdk-side-list')[0]; if (list) list.scrollTop = $want[0].offsetTop - 120;
+            } else if($('.wp-ai-sidebar-item').length > 0) {
+                $('.wp-ai-sidebar-item').first().click();
+            }
+        });
+        </script>
+        <?php
+    }
+}

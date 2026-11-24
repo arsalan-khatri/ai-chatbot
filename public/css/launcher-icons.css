@@ -1,0 +1,363 @@
+/**
+ * AK Deep Knowledge AI Chatbot - animated launcher icons.
+ * Colours: --akic-main, --akic-face, --akic-eye, --akic-accent,
+ * --akic-ink-light / --akic-ink-dark (outline on light / dark websites).
+ */
+
+/* ---------- Colours & light / dark mode ---------- */
+.akic-scope {
+    --akic-main: #fd9400;
+    --akic-face: #0a0a0a;
+    --akic-eye: #ffffff;
+    --akic-accent: #fd9400;
+    --akic-ink-light: #0a0a0a;
+    --akic-ink-dark: #ffffff;
+    --akic-ink: var(--akic-ink-light);
+}
+.akic-scope.akic-mode-dark { --akic-ink: var(--akic-ink-dark); }
+@media (prefers-color-scheme: dark) {
+    .akic-scope.akic-mode-auto { --akic-ink: var(--akic-ink-dark); }
+}
+
+/* ---------- Shared artwork classes ---------- */
+svg.akic { display: block; width: 100%; height: 100%; overflow: visible; }
+.akic * { transform-box: fill-box; }
+.akic [transform] { transform-box: view-box; } /* Static rotate() attributes keep their own pivot. */
+.akic .akic-main { fill: var(--akic-main); }
+.akic .akic-main-s { stroke: var(--akic-main); stroke-width: 3.4; stroke-linecap: round; }
+.akic .akic-line { stroke: var(--akic-ink); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+.akic .akic-thin { stroke-width: 1.6; }
+.akic .akic-thick { stroke-width: 3.2; }
+.akic .akic-whisker { stroke-width: 1.3; }
+.akic .akic-nofill { fill: none; }
+.akic .akic-face { fill: var(--akic-face); }
+.akic .akic-eye { fill: var(--akic-eye); }
+.akic .akic-eye-s { fill: none; stroke: var(--akic-eye); stroke-width: 2.4; stroke-linecap: round; }
+.akic .akic-acc { fill: var(--akic-accent); }
+.akic .akic-acc-s { fill: none; stroke: var(--akic-accent); stroke-width: 2; stroke-linecap: round; }
+.akic .akic-shine { fill: none; stroke: #fff; stroke-opacity: 0.5; stroke-width: 2.2; stroke-linecap: round; }
+.akic .akic-blush { fill: var(--akic-face); opacity: 0.15; }
+.akic .akic-shadow { fill: #000; opacity: 0.14; }
+.akic .akic-o25 { opacity: 0.25; }
+.akic .akic-o30 { opacity: 0.3; }
+.akic .akic-o35 { opacity: 0.35; }
+.akic .akic-o60 { opacity: 0.6; }
+
+.akic .akic-blink { transform-origin: center; animation: akic-blink 4s infinite; }
+.akic .akic-spark { transform-origin: center; animation: akic-twinkle 2s ease-in-out infinite; }
+.akic .akic-root { transform-origin: 50% 100%; }
+
+@keyframes akic-blink { 0%, 46%, 50%, 100% { transform: scaleY(1); } 48% { transform: scaleY(0.1); } }
+@keyframes akic-twinkle { 0%, 100% { transform: scale(0.6) rotate(0deg); opacity: 0.6; } 50% { transform: scale(1) rotate(45deg); opacity: 1; } }
+@keyframes akic-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* Hover / focus reaction for every icon: a happy jiggle. */
+.wp-ai-chatbot-toggle:hover .akic-root,
+.wp-ai-chatbot-toggle:focus-visible .akic-root,
+.akic-card:hover .akic-root { animation: akic-hover 0.8s ease; }
+@keyframes akic-hover {
+    0%, 100% { transform: scale(1) rotate(0); }
+    25% { transform: scale(1.12, 0.92) rotate(-4deg); }
+    50% { transform: scale(0.95, 1.08) rotate(4deg); }
+    75% { transform: scale(1.04, 0.97) rotate(-2deg); }
+}
+
+/* ---------- 1. AKDK Bot ---------- */
+.akic-akdk_bot .akic-bot-hop { transform-origin: 50% 100%; animation: akic-bot-hop 4s ease-in-out infinite; }
+.akic-akdk_bot .akic-bot-shadow { transform-origin: center; animation: akic-bot-shadow 4s ease-in-out infinite; }
+.akic-akdk_bot .akic-bot-look { animation: akic-bot-look 4s ease-in-out infinite; }
+.akic-akdk_bot .akic-bot-happy { opacity: 0; animation: akic-bot-happy 4s steps(1) infinite; }
+.akic-akdk_bot .akic-bot-open { animation: akic-bot-open 4s steps(1) infinite; }
+.akic-akdk_bot .akic-bot-mouth { transform-origin: center; animation: akic-bot-smile 4s ease-in-out infinite; }
+.akic-akdk_bot .akic-bot-hand { transform-origin: 15% 90%; transform: scale(0); animation: akic-bot-wave 4s ease-in-out infinite; }
+.akic-akdk_bot .akic-bot-tip { animation: akic-pulse 1s ease-in-out infinite; }
+@keyframes akic-bot-hop {
+    0%, 16%, 100% { transform: translateY(0) scale(1, 1); }
+    4% { transform: translateY(0) scale(1.06, 0.92); }
+    9% { transform: translateY(-7px) scale(0.96, 1.05); }
+    14% { transform: translateY(0) scale(1.05, 0.94); }
+}
+@keyframes akic-bot-shadow { 0%, 16%, 100% { transform: scaleX(1); opacity: 0.14; } 9% { transform: scaleX(0.7); opacity: 0.06; } }
+@keyframes akic-bot-look { 0%, 18%, 46%, 100% { transform: translateX(0); } 22%, 29% { transform: translateX(3px); } 33%, 41% { transform: translateX(-3px); } }
+@keyframes akic-bot-open { 0% { opacity: 1; } 54% { opacity: 0; } 90% { opacity: 1; } }
+@keyframes akic-bot-happy { 0% { opacity: 0; } 54% { opacity: 1; } 90% { opacity: 0; } }
+@keyframes akic-bot-smile { 0%, 52%, 92%, 100% { transform: scale(1, 1); } 58%, 86% { transform: scale(1.25, 1.6); } }
+@keyframes akic-bot-wave {
+    0%, 51%, 92%, 100% { transform: scale(0) rotate(0deg); }
+    55% { transform: scale(1) rotate(-12deg); }
+    60%, 70% { transform: scale(1) rotate(22deg); }
+    65%, 75% { transform: scale(1) rotate(-14deg); }
+    80% { transform: scale(1) rotate(18deg); }
+    87% { transform: scale(1) rotate(0deg); }
+}
+
+/* ---------- 2. Jelly ---------- */
+.akic-jelly .akic-jelly-body { transform-origin: 50% 100%; animation: akic-jelly-body 4s ease-in-out infinite; }
+.akic-jelly .akic-jelly-shadow { transform-origin: center; animation: akic-jelly-shadow 4s ease-in-out infinite; }
+.akic-jelly .akic-jelly-pupils { animation: akic-jelly-look 4s ease-in-out infinite; }
+.akic-jelly .akic-jelly-open { animation: akic-jelly-open 4s steps(1) infinite; }
+.akic-jelly .akic-jelly-squint { opacity: 0; stroke-width: 2.6; animation: akic-jelly-squint 4s steps(1) infinite; }
+.akic-jelly .akic-jelly-mouth { transform-origin: 50% 0%; animation: akic-jelly-mouth 4s ease-in-out infinite; }
+.akic-jelly .akic-jelly-bubbles { opacity: 0; animation: akic-jelly-bubbles 4s ease-out infinite; }
+@keyframes akic-jelly-body {
+    0%, 26%, 100% { transform: translateY(0) scale(1, 1); }
+    5% { transform: translateY(0) scale(1.12, 0.86); }
+    12% { transform: translateY(-9px) scale(0.92, 1.08); }
+    19% { transform: translateY(0) scale(1.14, 0.84); }
+    23% { transform: translateY(0) scale(0.96, 1.04); }
+    40%, 56% { transform: scale(1.04, 0.96); }
+    48% { transform: scale(0.97, 1.03); }
+}
+@keyframes akic-jelly-shadow { 0%, 26%, 100% { transform: scaleX(1); opacity: 0.14; } 12% { transform: scaleX(0.65); opacity: 0.05; } }
+@keyframes akic-jelly-look { 0%, 28%, 58%, 100% { transform: translate(0, 0); } 33%, 40% { transform: translate(-2.4px, -1px); } 45%, 52% { transform: translate(1.4px, 1.6px); } }
+@keyframes akic-jelly-open { 0% { opacity: 1; } 62% { opacity: 0; } 80% { opacity: 1; } }
+@keyframes akic-jelly-squint { 0% { opacity: 0; } 62% { opacity: 1; } 80% { opacity: 0; } }
+@keyframes akic-jelly-mouth { 0%, 60%, 82%, 100% { transform: scale(1, 1); } 65%, 77% { transform: scale(1.3, 1.7); } }
+@keyframes akic-jelly-bubbles { 0%, 62% { opacity: 0; transform: translateY(6px); } 70% { opacity: 1; transform: translateY(0); } 90% { opacity: 0; transform: translateY(-8px); } 100% { opacity: 0; } }
+
+/* ---------- 3. Kitty ---------- */
+.akic-kitty .akic-kitty-tail { transform-origin: 0% 100%; animation: akic-kitty-tail 2s ease-in-out infinite; }
+.akic-kitty .akic-kitty-tail .akic-thick { stroke-width: 6.4; }
+.akic-kitty .akic-kitty-head { transform-origin: 50% 90%; animation: akic-kitty-tilt 5s ease-in-out infinite; }
+.akic-kitty .akic-kitty-ear-r { transform-origin: 30% 100%; animation: akic-kitty-ear-r 5s ease-in-out infinite; }
+.akic-kitty .akic-kitty-ear-l { transform-origin: 70% 100%; animation: akic-kitty-ear-l 5s ease-in-out infinite; }
+.akic-kitty .akic-kitty-paw { transform-origin: 30% 100%; transform: scale(0); animation: akic-kitty-paw 5s ease-in-out infinite; }
+.akic-kitty .akic-blink { animation-duration: 5s; }
+@keyframes akic-kitty-tail { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(12deg); } }
+@keyframes akic-kitty-tilt { 0%, 40%, 82%, 100% { transform: rotate(0); } 48%, 74% { transform: rotate(-7deg); } }
+@keyframes akic-kitty-ear-r { 0%, 20%, 30%, 100% { transform: rotate(0); } 23%, 27% { transform: rotate(-18deg); } 25% { transform: rotate(4deg); } }
+@keyframes akic-kitty-ear-l { 0%, 86%, 96%, 100% { transform: rotate(0); } 89%, 93% { transform: rotate(16deg); } 91% { transform: rotate(-4deg); } }
+@keyframes akic-kitty-paw {
+    0%, 46%, 82%, 100% { transform: scale(0) rotate(0); }
+    50% { transform: scale(1) rotate(-10deg); }
+    56%, 66% { transform: scale(1) rotate(16deg); }
+    61%, 71% { transform: scale(1) rotate(-12deg); }
+    77% { transform: scale(1) rotate(0); }
+}
+
+/* ---------- 4. Boo ---------- */
+.akic-boo .akic-boo-float { transform-origin: 50% 100%; animation: akic-boo-float 2.6s ease-in-out infinite; }
+.akic-boo .akic-boo-shadow { transform-origin: center; animation: akic-boo-shadow 2.6s ease-in-out infinite; }
+.akic-boo .akic-boo-arm-l { transform-origin: 100% 20%; animation: akic-boo-arm-l 1.3s ease-in-out infinite; }
+.akic-boo .akic-boo-arm-r { transform-origin: 0% 20%; animation: akic-boo-arm-r 1.3s ease-in-out infinite; }
+.akic-boo .akic-boo-mouth { transform-origin: center; animation: akic-boo-mouth 5.2s ease-in-out infinite; }
+.akic-boo .akic-boo-eyes { animation: akic-boo-eyes 5.2s ease-in-out infinite; }
+.akic-boo .akic-blink { animation-duration: 5.2s; }
+@keyframes akic-boo-float { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-5px) rotate(3deg); } }
+@keyframes akic-boo-shadow { 0%, 100% { transform: scaleX(1); opacity: 0.14; } 50% { transform: scaleX(0.72); opacity: 0.07; } }
+@keyframes akic-boo-arm-l { 0%, 100% { transform: rotate(10deg); } 50% { transform: rotate(-22deg); } }
+@keyframes akic-boo-arm-r { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(22deg); } }
+@keyframes akic-boo-mouth { 0%, 52%, 80%, 100% { transform: scale(1); } 58%, 74% { transform: scale(1.5, 1.7); } }
+@keyframes akic-boo-eyes { 0%, 20%, 44%, 100% { transform: translateX(0); } 25%, 39% { transform: translateX(2.5px); } }
+
+/* ---------- 5. Hoot ---------- */
+.akic-hoot .akic-hoot-tilt { transform-origin: 50% 100%; animation: akic-hoot-tilt 6s ease-in-out infinite; }
+.akic-hoot .akic-hoot-pupil { animation: akic-hoot-look 6s ease-in-out infinite; }
+.akic-hoot .akic-hoot-eye-l, .akic-hoot .akic-hoot-eye-r { transform-origin: center; animation: akic-blink 6s infinite; }
+.akic-hoot .akic-hoot-eye-r { animation-name: akic-hoot-wink; }
+.akic-hoot .akic-hoot-wink { opacity: 0; animation: akic-hoot-wink-line 6s steps(1) infinite; }
+.akic-hoot .akic-hoot-wing-l { transform-origin: 80% 10%; animation: akic-hoot-wing-l 6s ease-in-out infinite; }
+.akic-hoot .akic-hoot-wing-r { transform-origin: 20% 10%; animation: akic-hoot-wing-r 6s ease-in-out infinite; }
+@keyframes akic-hoot-tilt { 0%, 14%, 40%, 100% { transform: rotate(0); } 20%, 34% { transform: rotate(-9deg); } 50%, 58% { transform: rotate(7deg); } 64% { transform: rotate(0); } }
+@keyframes akic-hoot-look { 0%, 16%, 38%, 100% { transform: translate(0, 0); } 20%, 34% { transform: translate(-2px, 1px); } 50%, 58% { transform: translate(2px, -1px); } }
+@keyframes akic-hoot-wink { 0%, 76%, 86%, 100% { transform: scaleY(1); } 78%, 84% { transform: scaleY(0); } }
+@keyframes akic-hoot-wink-line { 0% { opacity: 0; } 78% { opacity: 1; } 84% { opacity: 0; } }
+@keyframes akic-hoot-wing-l { 0%, 62%, 74%, 100% { transform: rotate(0); } 64%, 68%, 72% { transform: rotate(28deg); } 66%, 70% { transform: rotate(-4deg); } }
+@keyframes akic-hoot-wing-r { 0%, 62%, 74%, 100% { transform: rotate(0); } 64%, 68%, 72% { transform: rotate(-28deg); } 66%, 70% { transform: rotate(4deg); } }
+
+/* ---------- 6. Support Buddy ---------- */
+.akic-buddy .akic-buddy-nod { transform-origin: 50% 100%; animation: akic-buddy-nod 5s ease-in-out infinite; }
+.akic-buddy .akic-buddy-brows { animation: akic-buddy-brows 5s ease-in-out infinite; }
+.akic-buddy .akic-buddy-mouth { transform-origin: center; animation: akic-buddy-talk 5s linear infinite; }
+.akic-buddy .akic-buddy-typing { transform-origin: 20% 100%; animation: akic-buddy-typing 5s ease-in-out infinite; }
+.akic-buddy .akic-dot1, .akic-buddy .akic-dot2, .akic-buddy .akic-dot3 { animation: akic-buddy-dot 0.9s ease-in-out infinite; }
+.akic-buddy .akic-dot2 { animation-delay: 0.15s; }
+.akic-buddy .akic-dot3 { animation-delay: 0.3s; }
+.akic-buddy .akic-blink { animation-duration: 5s; }
+@keyframes akic-buddy-nod { 0%, 44%, 100% { transform: rotate(0); } 50%, 62% { transform: rotate(-3deg) translateY(1px); } 56%, 68% { transform: rotate(3deg); } 74% { transform: rotate(0); } }
+@keyframes akic-buddy-brows { 0%, 14%, 30%, 100% { transform: translateY(0); } 18%, 26% { transform: translateY(-2.2px); } }
+@keyframes akic-buddy-talk {
+    0%, 46%, 84%, 100% { transform: scale(1, 1); }
+    50%, 58%, 66%, 74% { transform: scale(0.85, 0.45); }
+    54%, 62%, 70%, 78% { transform: scale(1.1, 1.45); }
+}
+@keyframes akic-buddy-typing { 0%, 42%, 100% { transform: scale(0); opacity: 0; } 4% { transform: scale(1.1); opacity: 1; } 8%, 36% { transform: scale(1); opacity: 1; } }
+@keyframes akic-buddy-dot { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-2px); } }
+
+/* ---------- Shared motion for the 20 extra characters (1.6.1) ---------- */
+.akic .akic-tongue { fill: #ff6b81; }
+.akic .akic-tongue-s { stroke: #ff6b81; stroke-width: 2.6; stroke-linecap: round; }
+.akic .akic-face-s { stroke: var(--akic-face); stroke-width: 4.2; }
+.akic .akic-o80 { opacity: 0.8; }
+.akic .akic-sprinkle { stroke-width: 1.8; stroke-linecap: round; }
+.akic .akic-a-earflop { animation: akic-m-earflop 2.8s ease-in-out infinite; }
+.akic .akic-flip.akic-a-earflop { animation-name: akic-m-earflop-r; }
+@keyframes akic-m-earflop { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(10deg); } }
+@keyframes akic-m-earflop-r { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-10deg); } }
+
+.akic .akic-a-look { animation: akic-m-look 4.4s ease-in-out infinite; }
+.akic .akic-a-lookaround { animation: akic-m-lookaround 5s ease-in-out infinite; }
+.akic .akic-a-bob { animation: akic-m-bob 2.6s ease-in-out infinite; }
+.akic .akic-a-hop { transform-origin: 50% 100%; animation: akic-m-hop 3s ease-in-out infinite; }
+.akic .akic-a-hopshadow { transform-origin: center; animation: akic-m-hopshadow 3s ease-in-out infinite; }
+.akic .akic-a-sway { transform-origin: 50% 100%; animation: akic-m-sway 3.4s ease-in-out infinite; }
+.akic .akic-a-tilt { transform-origin: 50% 100%; animation: akic-m-tilt 5s ease-in-out infinite; }
+.akic .akic-a-twitch { animation: akic-m-twitch 3.4s ease-in-out infinite; }
+.akic .akic-a-flop { animation: akic-m-flop 4s ease-in-out infinite; }
+.akic .akic-a-wag { animation: akic-m-wag 0.9s ease-in-out infinite; }
+.akic .akic-a-wiggle { animation: akic-m-wiggle 1.6s ease-in-out infinite; }
+.akic .akic-a-flap { animation: akic-m-flap 2.6s ease-in-out infinite; }
+.akic .akic-a-wink { transform-origin: center; animation: akic-m-wink 4.6s infinite; }
+.akic .akic-a-wink-open { transform-origin: center; animation: akic-m-hide 4.6s steps(1) infinite; }
+.akic .akic-a-wink-line { opacity: 0; animation: akic-m-show 4.6s steps(1) infinite; }
+.akic .akic-a-blink-slow { transform-origin: center; animation: akic-m-blinkslow 5s infinite; }
+.akic .akic-a-sniff { transform-origin: center; animation: akic-m-sniff 2.2s ease-in-out infinite; }
+.akic .akic-a-squish { transform-origin: 50% 100%; animation: akic-m-squish 4s ease-in-out infinite; }
+.akic .akic-a-croak { transform-origin: center; animation: akic-m-croak 4s ease-in-out infinite; }
+.akic .akic-a-flick { transform: scaleX(0); animation: akic-m-flick 4s ease-in-out infinite; }
+.akic .akic-a-buzz { animation: akic-m-buzz 1.6s ease-in-out infinite; }
+.akic .akic-a-buzzwing { animation: akic-m-buzzwing 0.16s linear infinite alternate; }
+.akic .akic-a-fly { animation: akic-m-fly 4s ease-in-out infinite; }
+.akic .akic-a-waddle { transform-origin: 50% 100%; animation: akic-m-waddle 1.2s ease-in-out infinite; }
+.akic .akic-a-chirp { animation: akic-m-chirp 3.6s ease-in-out infinite; }
+.akic .akic-a-peek { animation: akic-m-peek 3.6s ease-in-out infinite; }
+.akic .akic-a-wobble { animation: akic-m-wobble 3.6s ease-in-out infinite; }
+.akic .akic-a-pant { animation: akic-m-pant 0.5s ease-in-out infinite alternate; }
+.akic .akic-a-blinklight { animation: akic-m-blinklight 1.2s steps(1) infinite; }
+.akic .akic-a-hover { transform-origin: 50% 50%; animation: akic-m-hover 3s ease-in-out infinite; }
+.akic .akic-a-beam { opacity: 0.12; animation: akic-m-beam 1.6s ease-in-out infinite; }
+.akic .akic-a-launch { animation: akic-m-launch 0.14s linear infinite alternate; }
+.akic .akic-a-flicker { animation: akic-m-flicker 0.22s ease-in-out infinite alternate; }
+.akic .akic-a-drop { opacity: 0; animation: akic-m-drop 2s ease-in infinite; }
+.akic .akic-a-spin { transform-origin: center; animation: akic-m-spin 14s linear infinite; }
+.akic .akic-a-glint { animation: akic-m-glint 3s ease-in-out infinite; }
+.akic .akic-a-rise { opacity: 0; transform-origin: center; animation: akic-m-rise 3s ease-out infinite; }
+.akic .akic-a-beat { transform-origin: 50% 60%; animation: akic-m-beat 1.4s ease-in-out infinite; }
+.akic .akic-a-roll { transform-origin: 50% 50%; animation: akic-m-roll 3.4s ease-in-out infinite; }
+.akic .akic-a-steam { opacity: 0; animation: akic-m-steam 2.4s ease-out infinite; }
+.akic .akic-a-scan { animation: akic-m-scan 1.8s ease-in-out infinite alternate; }
+.akic .akic-a-talkbars { animation: akic-m-glint 0.6s steps(2) infinite; }
+.akic .akic-a-roarshake { transform-origin: 50% 100%; animation: akic-m-roarshake 4s ease-in-out infinite; }
+.akic .akic-a-roar { animation: akic-m-roar 4s ease-in-out infinite; }
+.akic .akic-a-jiggle { transform-origin: 50% 100%; animation: akic-m-jiggle 2.4s ease-in-out infinite; }
+.akic .akic-a-tongue { transform: scaleY(0); animation: akic-m-tongue 3.6s ease-in-out infinite; }
+.akic .akic-a-tonguewag { animation: akic-m-tonguewag 0.4s ease-in-out infinite alternate; }
+
+@keyframes akic-m-look { 0%, 20%, 50%, 100% { transform: translateX(0); } 26%, 36% { transform: translateX(2.2px); } 40%, 46% { transform: translateX(-2.2px); } }
+@keyframes akic-m-lookaround { 0%, 100% { transform: translate(0, 0); } 20% { transform: translate(-3px, -1px); } 40% { transform: translate(2.6px, -2px); } 60% { transform: translate(3px, 1.6px); } 80% { transform: translate(-2px, 2px); } }
+@keyframes akic-m-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes akic-m-hop { 0%, 18%, 100% { transform: translateY(0) scale(1, 1); } 5% { transform: scale(1.08, 0.9); } 10% { transform: translateY(-8px) scale(0.95, 1.06); } 15% { transform: scale(1.06, 0.93); } }
+@keyframes akic-m-hopshadow { 0%, 18%, 100% { transform: scaleX(1); opacity: 0.14; } 10% { transform: scaleX(0.68); opacity: 0.05; } }
+@keyframes akic-m-sway { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+@keyframes akic-m-tilt { 0%, 30%, 70%, 100% { transform: rotate(0); } 40%, 60% { transform: rotate(-8deg); } }
+@keyframes akic-m-twitch { 0%, 26%, 36%, 100% { transform: rotate(0); } 29%, 33% { transform: rotate(-16deg); } 31% { transform: rotate(6deg); } }
+@keyframes akic-m-flop { 0%, 30%, 70%, 100% { transform: rotate(0); } 40%, 60% { transform: rotate(32deg); } }
+@keyframes akic-m-wag { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } }
+@keyframes akic-m-wiggle { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
+@keyframes akic-m-flap { 0%, 50%, 74%, 100% { transform: rotate(0); } 54%, 62%, 70% { transform: rotate(-26deg); } 58%, 66% { transform: rotate(8deg); } }
+@keyframes akic-m-wink { 0%, 66%, 76%, 100% { transform: scaleY(1); } 69%, 73% { transform: scaleY(0.08); } }
+@keyframes akic-m-hide { 0% { opacity: 1; } 64% { opacity: 0; } 78% { opacity: 1; } }
+@keyframes akic-m-show { 0% { opacity: 0; } 64% { opacity: 1; } 78% { opacity: 0; } }
+@keyframes akic-m-blinkslow { 0%, 44%, 52%, 100% { transform: scaleY(1); } 48% { transform: scaleY(0.08); } }
+@keyframes akic-m-sniff { 0%, 60%, 100% { transform: scale(1); } 66%, 78% { transform: scale(1.25, 0.85); } 72%, 84% { transform: scale(0.9, 1.1); } }
+@keyframes akic-m-squish { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.04, 0.96); } }
+@keyframes akic-m-croak { 0%, 20%, 44%, 100% { transform: scale(1); } 26%, 38% { transform: scale(1.35, 1.5); } 32% { transform: scale(1.1, 1.2); } }
+@keyframes akic-m-flick { 0%, 58%, 76%, 100% { transform: scaleX(0); } 64%, 68% { transform: scaleX(1); } }
+@keyframes akic-m-buzz { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-3px, 2px); } 50% { transform: translate(-1px, -2px); } 75% { transform: translate(2px, 1px); } }
+@keyframes akic-m-buzzwing { from { transform: scaleY(1); } to { transform: scaleY(0.45); } }
+@keyframes akic-m-fly { 0%, 100% { transform: translate(0, 0) rotate(0); } 25% { transform: translate(4px, -4px) rotate(6deg); } 50% { transform: translate(0, -2px) rotate(0); } 75% { transform: translate(-4px, -4px) rotate(-6deg); } }
+@keyframes akic-m-waddle { 0%, 100% { transform: rotate(-7deg) translateX(-1px); } 50% { transform: rotate(7deg) translateX(1px); } }
+@keyframes akic-m-chirp { 0%, 40%, 58%, 100% { transform: rotate(0); } 44%, 52% { transform: rotate(-22deg); } 48% { transform: rotate(-8deg); } }
+@keyframes akic-m-peek { 0%, 100% { transform: translateY(8px); } 20%, 70% { transform: translateY(0); } 26% { transform: translateY(-4px); } }
+@keyframes akic-m-wobble { 0%, 18%, 30%, 100% { transform: rotate(0); } 21% { transform: rotate(-5deg); } 24% { transform: rotate(5deg); } 27% { transform: rotate(-3deg); } }
+@keyframes akic-m-pant { from { transform: scaleY(0.85); } to { transform: scaleY(1.12); } }
+@keyframes akic-m-blinklight { 0% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes akic-m-hover { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-5px) rotate(4deg); } }
+@keyframes akic-m-beam { 0%, 100% { opacity: 0.1; } 50% { opacity: 0.4; } }
+@keyframes akic-m-launch { from { transform: translate(-0.5px, 0); } to { transform: translate(0.5px, -0.6px); } }
+@keyframes akic-m-flicker { from { transform: scaleY(0.75); } to { transform: scaleY(1.15); } }
+@keyframes akic-m-drop { 0% { opacity: 0; transform: translateY(-8px); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(6px); } }
+@keyframes akic-m-spin { to { transform: rotate(360deg); } }
+@keyframes akic-m-glint { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@keyframes akic-m-rise { 0% { opacity: 0; transform: translateY(8px) scale(0.6); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(-10px) scale(1); } }
+@keyframes akic-m-beat { 0%, 40%, 100% { transform: scale(1); } 12% { transform: scale(1.1); } 24% { transform: scale(0.98); } 32% { transform: scale(1.06); } }
+@keyframes akic-m-roll { 0%, 100% { transform: rotate(-12deg) translateX(-2px); } 50% { transform: rotate(12deg) translateX(2px); } }
+@keyframes akic-m-steam { 0% { opacity: 0; transform: translateY(6px); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(-6px); } }
+@keyframes akic-m-scan { from { transform: translateX(0); } to { transform: translateX(15px); } }
+@keyframes akic-m-roarshake { 0%, 50%, 74%, 100% { transform: rotate(0); } 54%, 62%, 70% { transform: rotate(-3deg); } 58%, 66% { transform: rotate(3deg); } }
+@keyframes akic-m-roar { 0%, 48%, 76%, 100% { transform: scaleY(0.55); } 54%, 70% { transform: scaleY(1.2); } }
+@keyframes akic-m-jiggle { 0%, 100% { transform: scale(1, 1) rotate(0); } 25% { transform: scale(1.05, 0.95) rotate(-3deg); } 50% { transform: scale(0.97, 1.03); } 75% { transform: scale(1.03, 0.97) rotate(3deg); } }
+@keyframes akic-m-tongue { 0%, 36%, 84%, 100% { transform: scaleY(0); } 44%, 76% { transform: scaleY(1); } }
+@keyframes akic-m-tonguewag { from { transform: rotate(-12deg); } to { transform: rotate(12deg); } }
+
+.akic .akic-online { fill: #22c55e; }
+.akic .akic-a-phase-a { animation: akic-m-phase-a 4.4s steps(1) infinite; }
+.akic .akic-a-phase-b { opacity: 0; animation: akic-m-phase-b 4.4s steps(1) infinite; }
+.akic .akic-a-dot { animation: akic-m-dot 0.9s ease-in-out infinite; }
+.akic .akic-a-sparkle { transform-origin: center; animation: akic-m-sparkle 3s ease-in-out infinite; }
+.akic .akic-a-pop { animation: akic-m-pop 4.4s ease-in-out infinite; }
+.akic .akic-a-glide { animation: akic-m-glide 4s ease-in-out infinite; }
+.akic .akic-a-rock { transform-origin: 50% 60%; animation: akic-m-rock 4s ease-in-out infinite; }
+.akic .akic-a-pulse-soft { transform-origin: center; animation: akic-m-pulse-soft 1.6s ease-in-out infinite; }
+.akic .akic-a-eq { transform-origin: center; animation: akic-m-eq 0.7s ease-in-out infinite alternate; }
+.akic .akic-a-ring { transform-origin: center; opacity: 0; animation: akic-m-ring 2s ease-out infinite; }
+@keyframes akic-m-phase-a { 0% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes akic-m-phase-b { 0% { opacity: 0; } 50% { opacity: 1; } }
+@keyframes akic-m-dot { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-3px); } }
+@keyframes akic-m-sparkle { 0%, 100% { transform: scale(0.85) rotate(0deg); } 50% { transform: scale(1.08) rotate(90deg); } }
+@keyframes akic-m-pop { 0%, 100% { transform: scale(1); } 8% { transform: scale(1.12); } 14% { transform: scale(0.96); } 20% { transform: scale(1); } 50% { transform: scale(1); } 58% { transform: scale(1.1); } 64% { transform: scale(1); } }
+@keyframes akic-m-glide { 0%, 20%, 100% { transform: translateX(0); } 30%, 45% { transform: translateX(-3.4px); } 60%, 75% { transform: translateX(3.4px); } }
+@keyframes akic-m-rock { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+@keyframes akic-m-pulse-soft { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.3); } }
+@keyframes akic-m-eq { from { transform: scaleY(0.35); } to { transform: scaleY(1.15); } }
+@keyframes akic-m-ring { 0% { opacity: 0.7; transform: scale(1); } 100% { opacity: 0; transform: scale(1.6); } }
+
+/* ---------- Launcher button with an animated icon ---------- */
+.wp-ai-chatbot-toggle.wp-ai-toggle-animated {
+    background: transparent; box-shadow: none; border-radius: 0; overflow: visible;
+}
+.wp-ai-chatbot-toggle.wp-ai-toggle-animated:hover { box-shadow: none; }
+.wp-ai-chatbot-toggle svg.akic { width: 100%; height: 100%; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.16)); }
+body.wp-ai-chat-open .akic *,
+.wp-ai-fab-container.active .akic * { animation-play-state: paused; }
+
+/* Greeting bubble ("Hi!"). */
+.wp-ai-chatbot-toggle .wp-ai-greet {
+    position: absolute; bottom: calc(100% - 2px); right: 62%;
+    padding: 5px 11px; border-radius: 14px 14px 3px 14px;
+    background: var(--akic-eye); color: var(--akic-face); border: 2px solid var(--akic-ink);
+    font-size: 13px; font-weight: 800; line-height: 1.25; white-space: nowrap;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+    pointer-events: none; opacity: 0; transform-origin: 100% 100%;
+    transition: opacity .2s ease, transform .2s ease;
+    transform: translateY(5px) scale(.95);
+}
+.wp-ai-pos-left .wp-ai-chatbot-toggle .wp-ai-greet { right: auto; left: 62%; border-radius: 14px 14px 14px 3px; transform-origin: 0 100%; }
+.wp-ai-chatbot-toggle:hover .wp-ai-greet,
+.wp-ai-fab-container.wp-ai-greeting-visible .wp-ai-greet { opacity: 1; transform: none; }
+body.wp-ai-chat-open .wp-ai-greet,
+.wp-ai-fab-container.active .wp-ai-greet { display: none; }
+@keyframes akic-greet {
+    0%, 4% { opacity: 0; transform: translateY(6px) scale(0.5); }
+    8%, 56% { opacity: 1; transform: translateY(0) scale(1); }
+    10% { transform: translateY(0) scale(1.08); }
+    62%, 100% { opacity: 0; transform: translateY(4px) scale(0.6); }
+}
+
+/* Small close badge while the chat (or WhatsApp menu) is open. */
+.wp-ai-chatbot-toggle .wp-ai-launcher-x {
+    position: absolute; top: -3px; right: -3px; width: 24px; height: 24px; border-radius: 50%;
+    display: none; align-items: center; justify-content: center;
+    background: var(--akic-face); color: var(--akic-eye); border: 2px solid var(--akic-eye);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.wp-ai-chatbot-toggle .wp-ai-launcher-x svg { width: 14px !important; height: 14px !important; }
+body.wp-ai-chat-open .wp-ai-toggle-animated .wp-ai-launcher-x,
+body.wp-ai-chat-open .wp-ai-toggle-custom .wp-ai-launcher-x,
+.wp-ai-fab-container.active .wp-ai-toggle-animated .wp-ai-launcher-x,
+.wp-ai-fab-container.active .wp-ai-toggle-custom .wp-ai-launcher-x { display: flex; }
+
+@media (prefers-reduced-motion: reduce) {
+    .akic *, .wp-ai-chatbot-toggle .wp-ai-greet { animation: none !important; }
+    .wp-ai-chatbot-toggle .wp-ai-greet { transition: none; }
+}

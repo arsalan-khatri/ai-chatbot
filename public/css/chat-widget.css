@@ -1,0 +1,497 @@
+/**
+ * AK Deep Knowledge AI Chatbot - front-end widget.
+ * Colours and sizes come from CSS variables printed by PHP (Appearance settings).
+ */
+
+.wp-ai-fab-container,
+.wp-ai-chatbot-window {
+    --wp-ai-border-color: #ececec;
+    --wp-ai-header-bg: #fd9400;
+    --wp-ai-header-text: #0a0a0a;
+    --wp-ai-chat-bg: #ffffff;
+    --wp-ai-bot-bg: #f5f5f5;
+    --wp-ai-bot-text: #0a0a0a;
+    --wp-ai-user-bg: #0a0a0a;
+    --wp-ai-user-text: #ffffff;
+    --wp-ai-send-bg: #fd9400;
+    --wp-ai-send-hover-bg: #e58600;
+    --wp-ai-send-text: #0a0a0a;
+    --wp-ai-send-icon-hover: #0a0a0a;
+    --wp-ai-del-bg: #d63638;
+    --wp-ai-close-color: #0a0a0a;
+    --wp-ai-close-hover-bg: rgba(0, 0, 0, 0.08);
+    --wp-ai-close-size: 32px;
+    --wp-ai-input-bg: #ffffff;
+    --wp-ai-input-border-color: #e5e5e5;
+    --wp-ai-input-focus-color: #fd9400;
+    --wp-ai-input-border-width: 1px;
+    --wp-ai-primary-color: #fd9400;
+    --wp-ai-chat-width: 380px;
+    --wp-ai-chat-height: 600px;
+    --wp-ai-chat-radius: 18px;
+    --wp-ai-icon-size: 58px;
+}
+
+.wp-ai-fab-container, .wp-ai-fab-container *,
+.wp-ai-chatbot-window, .wp-ai-chatbot-window * {
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    letter-spacing: normal;
+    text-transform: none;
+}
+.wp-ai-chatbot-window :where(button, input, select, textarea) { font-family: inherit; margin: 0; text-shadow: none; box-shadow: none; min-height: 0; text-transform: none; }
+.wp-ai-chatbot-window svg { display: block; }
+
+/* ---------- Launcher ---------- */
+.wp-ai-fab-container {
+    position: fixed; bottom: 24px; right: 24px;
+    z-index: 2147483000;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+    pointer-events: none;
+}
+.wp-ai-chatbot-toggle {
+    position: relative;
+    width: var(--wp-ai-icon-size); height: var(--wp-ai-icon-size);
+    background: var(--wp-ai-header-bg); color: var(--wp-ai-header-text);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; pointer-events: auto;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.wp-ai-chatbot-toggle:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.22); }
+.wp-ai-chatbot-toggle svg { width: 46%; height: 46%; }
+.wp-ai-chatbot-toggle .wp-ai-icon-close { display: none; }
+body.wp-ai-chat-open .wp-ai-chatbot-toggle .wp-ai-icon-open { display: none; }
+body.wp-ai-chat-open .wp-ai-chatbot-toggle .wp-ai-icon-close { display: block; }
+.wp-ai-toggle-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.wp-ai-toggle-transparent .wp-ai-chatbot-toggle { background: transparent; box-shadow: none; }
+
+.wp-ai-fab-menu {
+    position: absolute; bottom: calc(100% + 12px); left: 50%;
+    display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 0;
+    opacity: 0; visibility: hidden; transform: translate(-50%, 14px) scale(0.9);
+    transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1); pointer-events: none;
+}
+.wp-ai-fab-container.has-wa-menu.active .wp-ai-fab-menu { opacity: 1; visibility: visible; transform: translateX(-50%); pointer-events: auto; }
+.wp-ai-fab-item {
+    position: relative;
+    width: calc(var(--wp-ai-icon-size) * 0.8); height: calc(var(--wp-ai-icon-size) * 0.8);
+    border-radius: 50%; border: none; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; cursor: pointer; text-decoration: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16); transition: transform 0.2s ease;
+}
+.wp-ai-fab-item:hover { transform: scale(1.08); }
+.wp-ai-fab-item svg { width: 46%; height: 46%; }
+.wp-ai-fab-item img { width: 55%; height: 55%; object-fit: contain; pointer-events: none; }
+.wp-ai-whatsapp-btn { background: #25D366; }
+.wp-ai-chat-btn { background: var(--wp-ai-header-bg); color: var(--wp-ai-header-text); }
+.wp-ai-fab-label {
+    position: absolute; right: calc(100% + 12px);
+    background: rgba(10, 10, 10, 0.85); color: #fff;
+    padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap;
+    opacity: 0; transform: translateX(6px); transition: all 0.2s ease; pointer-events: none;
+}
+.wp-ai-fab-item:hover .wp-ai-fab-label { opacity: 1; transform: none; }
+body.wp-ai-chat-open .wp-ai-chat-btn { display: none; }
+
+/* ---------- Window ---------- */
+.wp-ai-chatbot-window {
+    position: fixed; bottom: 96px; right: 24px;
+    width: var(--wp-ai-chat-width); height: var(--wp-ai-chat-height);
+    max-height: calc(100vh - 120px); max-width: calc(100vw - 32px);
+    border-radius: var(--wp-ai-chat-radius);
+    background: var(--wp-ai-chat-bg); color: var(--wp-ai-bot-text);
+    border: 1px solid var(--wp-ai-border-color);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.06);
+    display: flex; flex-direction: column; overflow: hidden;
+    z-index: 2147483001;
+    transition: opacity 0.22s ease, transform 0.22s ease, visibility 0.22s;
+}
+.wp-ai-chatbot-window.wp-ai-hidden { opacity: 0; visibility: hidden; transform: translateY(16px) scale(0.97); pointer-events: none; }
+.wp-ai-chatbot-window.wp-ai-glass { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+
+/* Header */
+.wp-ai-chat-header {
+    flex-shrink: 0;
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 12px 12px 14px;
+    background: var(--wp-ai-header-bg); color: var(--wp-ai-header-text);
+}
+.wp-ai-avatar { position: relative; width: 36px; height: 36px; flex-shrink: 0; }
+.wp-ai-avatar img, .wp-ai-avatar-initial {
+    width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 700;
+    background: rgba(127, 127, 127, 0.18);
+    background: color-mix(in srgb, var(--wp-ai-header-text) 14%, transparent);
+    color: var(--wp-ai-header-text);
+}
+.wp-ai-status-dot {
+    position: absolute; right: -1px; bottom: -1px;
+    width: 11px; height: 11px; border-radius: 50%;
+    background: #22c55e; border: 2px solid var(--wp-ai-header-bg);
+}
+.wp-ai-chat-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wp-ai-bot-name { font-size: 15px; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-ai-subtitle { font-size: 12px; line-height: 1.2; opacity: 0.78; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-ai-header-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.wp-ai-header-icon, .wp-ai-close-btn {
+    width: var(--wp-ai-close-size); height: var(--wp-ai-close-size);
+    padding: var(--wp-ai-close-padding, 0); margin: var(--wp-ai-close-margin, 0);
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: none; border-radius: 8px;
+    color: var(--wp-ai-close-color); cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease;
+}
+.wp-ai-header-icon svg { width: 17px; height: 17px; }
+.wp-ai-close-btn svg { width: 20px; height: 20px; }
+/* Close (X): solid button. !important stops theme button styles (focus/active) from turning it white. */
+.wp-ai-chatbot-window .wp-ai-close-btn,
+.wp-ai-chatbot-window .wp-ai-close-btn:focus,
+.wp-ai-chatbot-window .wp-ai-close-btn:active { background: var(--wp-ai-x-bg, #ef4444) !important; color: var(--wp-ai-x-icon, #ffffff) !important; border: none !important; box-shadow: none !important; }
+.wp-ai-chatbot-window .wp-ai-close-btn:hover,
+.wp-ai-chatbot-window .wp-ai-close-btn:focus-visible { background: var(--wp-ai-x-hover-bg, #dc2626) !important; color: var(--wp-ai-x-hover-icon, #ffffff) !important; }
+.wp-ai-chatbot-window .wp-ai-close-btn { border-radius: 10px; }
+.wp-ai-chatbot-window .wp-ai-clear-btn,
+.wp-ai-chatbot-window .wp-ai-clear-btn:focus,
+.wp-ai-chatbot-window .wp-ai-clear-btn:active { background: transparent !important; color: var(--wp-ai-close-color) !important; border: none !important; box-shadow: none !important; }
+.wp-ai-chatbot-window .wp-ai-clear-btn:hover,
+.wp-ai-chatbot-window .wp-ai-clear-btn:focus-visible { background: var(--wp-ai-del-bg) !important; color: #fff !important; }
+.wp-ai-chatbot-window .wp-ai-send-btn:focus, .wp-ai-chatbot-window .wp-ai-send-btn:active { background: var(--wp-ai-send-bg) !important; color: var(--wp-ai-send-text) !important; }
+.wp-ai-chatbot-window .wp-ai-send-btn:hover { background: var(--wp-ai-send-hover-bg) !important; color: var(--wp-ai-send-icon-hover) !important; }
+
+/* Messages */
+.wp-ai-chat-body {
+    flex: 1 1 auto; min-height: 0;
+    overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+    padding: 16px 14px 8px;
+    display: flex; flex-direction: column; gap: 10px;
+    scrollbar-width: thin; scrollbar-color: rgba(127, 127, 127, 0.35) transparent;
+}
+.wp-ai-chat-body::-webkit-scrollbar { width: 6px; }
+.wp-ai-chat-body::-webkit-scrollbar-thumb { background: rgba(127, 127, 127, 0.35); border-radius: 3px; }
+
+.wp-ai-message-row { display: flex; align-items: flex-end; gap: 4px; width: 100%; }
+.wp-ai-message-row-user { justify-content: flex-end; }
+.wp-ai-message-row-bot { justify-content: flex-start; }
+
+.wp-ai-message {
+    position: relative; max-width: 84%;
+    padding: 10px 14px; border-radius: 16px;
+    font-size: 14px; line-height: 1.5; overflow-wrap: anywhere;
+    animation: wpAiFadeIn 0.25s ease both;
+}
+.wp-ai-bot-message { background: var(--wp-ai-bot-bg); color: var(--wp-ai-bot-text); border: 1px solid var(--wp-ai-border-color); border-bottom-left-radius: 6px; }
+.wp-ai-user-message { background: var(--wp-ai-user-bg); color: var(--wp-ai-user-text); border-bottom-right-radius: 6px; white-space: pre-wrap; }
+.wp-ai-message > :first-child { margin-top: 0; }
+.wp-ai-message > :last-child { margin-bottom: 0; }
+.wp-ai-message p { margin: 0 0 6px; }
+.wp-ai-message a { color: inherit; text-decoration: underline; font-weight: 600; }
+.wp-ai-message img { max-width: 100%; height: auto; max-height: 180px; object-fit: cover; }
+.wp-ai-bot-message h1, .wp-ai-bot-message h2, .wp-ai-bot-message h3, .wp-ai-bot-message h4 { margin: 8px 0 4px; font-size: 15px; line-height: 1.3; color: inherit; }
+.wp-ai-bot-message ul, .wp-ai-bot-message ol { margin: 6px 0 6px 18px; padding: 0; }
+.wp-ai-bot-message ul { list-style: disc; }
+.wp-ai-bot-message ol { list-style: decimal; }
+.wp-ai-bot-message li { margin: 0 0 4px; display: list-item; }
+.wp-ai-bot-message code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; background: rgba(127, 127, 127, 0.15); padding: 1px 5px; border-radius: 4px; }
+.wp-ai-bot-message pre { overflow-x: auto; background: rgba(127, 127, 127, 0.12); padding: 10px; border-radius: 8px; }
+.wp-ai-bot-message pre code { background: none; padding: 0; }
+.wp-ai-bot-message table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; display: block; overflow-x: auto; }
+.wp-ai-bot-message th, .wp-ai-bot-message td { padding: 6px 8px; border: 1px solid var(--wp-ai-border-color); text-align: left; }
+.wp-ai-bot-message th { background: rgba(127, 127, 127, 0.1); }
+.wp-ai-bot-message blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--wp-ai-send-bg); opacity: 0.9; }
+
+.wp-ai-copy-btn {
+    flex-shrink: 0; width: 26px; height: 26px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: none; border-radius: 50%;
+    color: var(--wp-ai-bot-text); opacity: 0; cursor: pointer; transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+.wp-ai-copy-btn svg { width: 13px; height: 13px; }
+.wp-ai-message-row:hover .wp-ai-copy-btn, .wp-ai-copy-btn:focus-visible { opacity: 0.55; }
+.wp-ai-copy-btn:hover { opacity: 1 !important; background: rgba(127, 127, 127, 0.14); }
+@media (hover: none) { .wp-ai-copy-btn { opacity: 0.4; } }
+
+.wp-ai-typing-indicator {
+    display: flex; gap: 4px; align-self: flex-start;
+    padding: 12px 14px; border-radius: 16px; border-bottom-left-radius: 6px;
+    background: var(--wp-ai-bot-bg); border: 1px solid var(--wp-ai-border-color);
+}
+.wp-ai-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--wp-ai-bot-text); opacity: 0.45; animation: wpAiTyping 1.3s infinite ease-in-out both; }
+.wp-ai-dot:nth-child(1) { animation-delay: -0.3s; }
+.wp-ai-dot:nth-child(2) { animation-delay: -0.15s; }
+@keyframes wpAiTyping { 0%, 80%, 100% { transform: scale(0.5); } 40% { transform: scale(1); } }
+@keyframes wpAiFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* Guided first questions */
+.wp-ai-guided-options-container { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 4px; animation: wpAiFadeIn 0.3s ease both; }
+.wp-ai-guided-btn {
+    background: transparent; color: var(--wp-ai-bot-text);
+    border: 1px solid var(--wp-ai-send-bg); border-radius: 999px;
+    padding: 7px 13px; font-size: 13px; line-height: 1.3; text-align: left; cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+.wp-ai-guided-btn:hover { background: var(--wp-ai-send-bg); color: var(--wp-ai-send-text); }
+
+/* ---------- Dock: quick actions + composer ---------- */
+.wp-ai-dock { flex-shrink: 0; padding: 8px 12px 10px; background: var(--wp-ai-chat-bg); }
+
+.wp-ai-quick-actions-wrapper { display: flex; align-items: center; gap: 4px; margin: 0 0 8px; }
+.wp-ai-quick-actions {
+    flex: 1; min-width: 0;
+    display: flex; gap: 6px; overflow-x: auto; white-space: nowrap;
+    scrollbar-width: none; -ms-overflow-style: none; scroll-behavior: smooth; overscroll-behavior-x: contain;
+}
+.wp-ai-quick-actions::-webkit-scrollbar { display: none; }
+.wp-ai-qa-align-left .wp-ai-quick-actions { justify-content: flex-start; }
+.wp-ai-qa-align-center .wp-ai-quick-actions { justify-content: center; }
+.wp-ai-qa-align-right .wp-ai-quick-actions { justify-content: flex-end; }
+.wp-ai-quick-actions-wrapper.is-overflowing .wp-ai-quick-actions { justify-content: flex-start; cursor: grab; }
+.wp-ai-quick-actions.wp-ai-dragging { cursor: grabbing; scroll-behavior: auto; }
+.wp-ai-quick-action-btn {
+    flex-shrink: 0;
+    background: transparent; color: var(--wp-ai-bot-text);
+    border: 1px solid var(--wp-ai-border-color); border-radius: 999px;
+    padding: 6px 12px; font-size: 12.5px; font-weight: 500; line-height: 1.2; cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.wp-ai-quick-action-btn:hover { border-color: var(--wp-ai-send-bg); background: var(--wp-ai-send-bg); color: var(--wp-ai-send-text); }
+.wp-ai-scroll-btn {
+    display: none; flex-shrink: 0; width: 22px; height: 22px; padding: 0;
+    align-items: center; justify-content: center;
+    background: transparent; border: none; border-radius: 50%; color: var(--wp-ai-bot-text); opacity: 0.6; cursor: pointer;
+}
+.wp-ai-scroll-btn svg { width: 14px; height: 14px; }
+.wp-ai-quick-actions-wrapper.is-overflowing .wp-ai-scroll-btn { display: flex; }
+.wp-ai-quick-actions-wrapper.wp-ai-disabled { opacity: 0.45; pointer-events: none; }
+
+.wp-ai-chat-footer { display: block; padding: 0; border: none; background: none; }
+.wp-ai-composer {
+    display: flex; align-items: center; gap: 4px;
+    min-height: 46px; padding: 4px 4px 4px 14px;
+    background: var(--wp-ai-input-bg);
+    border: var(--wp-ai-input-border-width) solid var(--wp-ai-input-border-color);
+    border-radius: 24px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.wp-ai-composer:focus-within { border-color: var(--wp-ai-input-focus-color); }
+.wp-ai-chatbot-window[data-input-border="none"] .wp-ai-composer { border-color: transparent; }
+.wp-ai-chatbot-window[data-input-border="top"] .wp-ai-composer,
+.wp-ai-chatbot-window[data-input-border="bottom"] .wp-ai-composer,
+.wp-ai-chatbot-window[data-input-border="left"] .wp-ai-composer,
+.wp-ai-chatbot-window[data-input-border="right"] .wp-ai-composer { border-width: 0; border-radius: 0; padding-left: 4px; }
+.wp-ai-chatbot-window[data-input-border="top"] .wp-ai-composer { border-top-width: var(--wp-ai-input-border-width); }
+.wp-ai-chatbot-window[data-input-border="bottom"] .wp-ai-composer { border-bottom-width: var(--wp-ai-input-border-width); }
+.wp-ai-chatbot-window[data-input-border="left"] .wp-ai-composer { border-left-width: var(--wp-ai-input-border-width); }
+.wp-ai-chatbot-window[data-input-border="right"] .wp-ai-composer { border-right-width: var(--wp-ai-input-border-width); }
+
+.wp-ai-composer input[type="text"] {
+    flex: 1; min-width: 0; height: 36px; margin: 0; padding: 0;
+    border: none !important; outline: none !important; box-shadow: none !important; border-radius: 0;
+    background: transparent !important; color: var(--wp-ai-input-text, var(--wp-ai-bot-text));
+    font-size: 14px; line-height: 36px;
+}
+.wp-ai-composer input::placeholder { color: var(--wp-ai-input-text, var(--wp-ai-bot-text)); opacity: 0.5; }
+.wp-ai-composer input:disabled { cursor: not-allowed; }
+
+.wp-ai-send-btn, .wp-ai-voice-btn {
+    flex-shrink: 0; width: 36px; height: 36px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border: none; border-radius: 50%; cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+.wp-ai-send-btn { background: var(--wp-ai-send-bg); color: var(--wp-ai-send-text); }
+.wp-ai-send-btn:hover { background: var(--wp-ai-send-hover-bg); color: var(--wp-ai-send-icon-hover); }
+.wp-ai-send-btn:active { transform: scale(0.94); }
+.wp-ai-send-btn svg { width: 18px; height: 18px; }
+.wp-ai-send-btn img { width: 18px; height: 18px; object-fit: contain; }
+.wp-ai-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.wp-ai-voice-btn { background: transparent; color: var(--wp-ai-input-text, var(--wp-ai-bot-text)); opacity: 0.7; }
+.wp-ai-voice-btn:hover { opacity: 1; background: rgba(127, 127, 127, 0.12); }
+.wp-ai-voice-btn svg { width: 18px; height: 18px; }
+.wp-ai-voice-btn[hidden] { display: none; }
+.wp-ai-voice-btn.is-listening { opacity: 1; color: #fff; background: #ef4444; animation: wpAiPulse 1.2s infinite; }
+.wp-ai-voice-btn.is-writing { opacity: 1; cursor: progress; animation: wpAiVoiceWrite 0.9s ease-in-out infinite alternate; }
+@keyframes wpAiVoiceWrite { from { opacity: 0.35; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .wp-ai-voice-btn.is-writing { animation: none; } }
+@keyframes wpAiPulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45); } 70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+
+.wp-ai-branding { margin-top: 6px; text-align: center; font-size: 10.5px; line-height: 1.2; color: var(--wp-ai-bot-text); opacity: 0.5; }
+.wp-ai-branding a { color: inherit; font-weight: 600; text-decoration: none; }
+.wp-ai-branding a:hover { text-decoration: underline; }
+
+/* ---------- Lead forms (inside a bot message) ---------- */
+.wp-ai-bot-message.has-form { width: 100%; max-width: 92%; }
+.wp-ai-form-container { width: 100%; }
+.wp-ai-form-title { margin: 0 0 10px; font-size: 14px; font-weight: 700; color: inherit; }
+.wp-ai-form-field { margin: 0 0 10px; }
+.wp-ai-form-field > label { display: block; margin: 0 0 4px; font-size: 12px; font-weight: 600; opacity: 0.85; }
+/* Themes often colour every <label> (dark text on a dark chat = invisible): always use the chat's text colour. */
+.wp-ai-chatbot-window .wp-ai-lead-form .wp-ai-form-field > label,
+.wp-ai-chatbot-window .wp-ai-form-title { color: var(--wp-ai-bot-text) !important; background: none !important; font-family: inherit; text-transform: none; letter-spacing: normal; }
+.wp-ai-chatbot-window .wp-ai-lead-form ::placeholder { color: var(--wp-ai-input-text, #0a0a0a) !important; opacity: 0.5 !important; }
+.wp-ai-chatbot-window .wp-ai-lead-form input:not([type="checkbox"]):not([type="hidden"]),
+.wp-ai-chatbot-window .wp-ai-lead-form textarea,
+.wp-ai-chatbot-window .wp-ai-lead-form select,
+.wp-ai-chatbot-window .wp-ai-ms-trigger,
+.wp-ai-chatbot-window .wp-ai-ms-dropdown { color: var(--wp-ai-input-text, #0a0a0a) !important; background-color: var(--wp-ai-input-bg) !important; }
+.wp-ai-form-field .wp-ai-req { color: #ef4444; }
+.wp-ai-lead-form input:not([type="checkbox"]):not([type="hidden"]),
+.wp-ai-lead-form textarea,
+.wp-ai-lead-form select,
+.wp-ai-ms-trigger {
+    width: 100%; margin: 0; padding: 9px 11px;
+    background: var(--wp-ai-input-bg); color: var(--wp-ai-bot-text);
+    border: 1px solid var(--wp-ai-input-border-color); border-radius: 10px;
+    font-size: 14px; line-height: 1.3; box-shadow: none; outline: none;
+}
+.wp-ai-lead-form textarea { min-height: 72px; resize: vertical; }
+.wp-ai-lead-form input:focus, .wp-ai-lead-form textarea:focus, .wp-ai-lead-form select:focus, .wp-ai-ms-trigger:focus { border-color: var(--wp-ai-input-focus-color); }
+.wp-ai-lead-form .wp-ai-invalid { border-color: #ef4444 !important; }
+.wp-ai-ms-wrapper { position: relative; }
+.wp-ai-ms-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; user-select: none; }
+.wp-ai-ms-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.75; }
+.wp-ai-ms-trigger svg { width: 12px; height: 12px; flex-shrink: 0; }
+.wp-ai-ms-dropdown {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+    max-height: 210px; overflow-y: auto;
+    background: var(--wp-ai-input-bg); color: var(--wp-ai-bot-text);
+    border: 1px solid var(--wp-ai-input-border-color); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+.wp-ai-ms-item, .wp-ai-ms-all { display: flex; align-items: center; gap: 8px; padding: 8px 11px; font-size: 13px; cursor: pointer; }
+.wp-ai-ms-all { font-weight: 600; border-bottom: 1px solid var(--wp-ai-border-color); }
+.wp-ai-ms-item:hover, .wp-ai-ms-all:hover { background: rgba(127, 127, 127, 0.1); }
+.wp-ai-form-error { display: none; margin: 0 0 8px; font-size: 12px; color: #ef4444; }
+.wp-ai-submit-btn {
+    width: 100%; padding: 10px; border: none; border-radius: 10px; cursor: pointer;
+    background: var(--wp-ai-send-bg); color: var(--wp-ai-send-text); font-size: 14px; font-weight: 700;
+    transition: background-color 0.15s ease;
+}
+.wp-ai-submit-btn:hover { background: var(--wp-ai-send-hover-bg); color: var(--wp-ai-send-icon-hover); }
+.wp-ai-submit-btn:disabled { opacity: 0.6; cursor: wait; }
+.wp-ai-form-success { margin: 0; padding: 6px 0; text-align: center; font-size: 14px; font-weight: 700; color: #16a34a; }
+
+/* ---------- Clear-chat dialog ---------- */
+.wp-ai-modal { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); }
+.wp-ai-modal.wp-ai-hidden { display: none; }
+.wp-ai-modal-content { width: 80%; max-width: 280px; padding: 18px; border-radius: 14px; text-align: center; background: var(--wp-ai-chat-bg); color: var(--wp-ai-bot-text); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); }
+.wp-ai-modal-content p { margin: 0 0 14px; font-size: 14px; font-weight: 600; }
+.wp-ai-modal-actions { display: flex; gap: 8px; justify-content: center; }
+.wp-ai-btn-danger, .wp-ai-btn-secondary { flex: 1; padding: 9px 12px; border-radius: 10px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; }
+.wp-ai-btn-danger { background: var(--wp-ai-del-bg); color: #fff; }
+.wp-ai-btn-secondary { background: rgba(127, 127, 127, 0.16); color: inherit; }
+
+/* Focus rings */
+.wp-ai-chatbot-toggle:focus-visible, .wp-ai-fab-item:focus-visible,
+.wp-ai-chatbot-window button:focus-visible, .wp-ai-ms-trigger:focus-visible { outline: 2px solid var(--wp-ai-input-focus-color); outline-offset: 2px; }
+
+/* ---------- Mobile: full screen ---------- */
+@media (max-width: 500px) {
+    .wp-ai-chatbot-window {
+        inset: 0 !important; width: 100% !important; height: 100% !important; height: 100dvh !important;
+        max-width: none !important; max-height: none !important; border-radius: 0; border: none;
+    }
+    .wp-ai-chat-header { padding-top: calc(10px + env(safe-area-inset-top)); }
+    .wp-ai-dock { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+    .wp-ai-composer input[type="text"], .wp-ai-lead-form input:not([type="checkbox"]), .wp-ai-lead-form textarea, .wp-ai-lead-form select { font-size: 16px; } /* stops iOS zoom */
+    .wp-ai-message { max-width: 88%; }
+    body.wp-ai-chat-open .wp-ai-fab-container { display: none; }
+    body.wp-ai-chat-open { overflow: hidden; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wp-ai-chatbot-window, .wp-ai-message, .wp-ai-fab-menu, .wp-ai-chatbot-toggle { transition: none; animation: none; }
+}
+
+/* Appearance screen live preview */
+.wp-ai-chatbot-window.wp-ai-preview { position: relative; inset: auto; bottom: auto; right: auto; max-height: none; max-width: 100%; z-index: 1; }
+.wp-ai-fab-container.has-wa-menu.active .wp-ai-icon-open { display: none; }
+.wp-ai-fab-container.has-wa-menu.active .wp-ai-icon-close { display: block; }
+
+/* Keep theme button styles (focus/active colours) from leaking into the widget. */
+.wp-ai-chatbot-window .wp-ai-quick-action-btn:is(:focus, :active):not(:hover),
+.wp-ai-chatbot-window .wp-ai-guided-btn:is(:focus, :active):not(:hover),
+.wp-ai-chatbot-window .wp-ai-copy-btn:is(:focus, :active):not(:hover),
+.wp-ai-chatbot-window .wp-ai-scroll-btn:is(:focus, :active):not(:hover),
+.wp-ai-chatbot-window .wp-ai-voice-btn:is(:focus, :active):not(:hover):not(.is-listening):not(.is-writing) { background: transparent !important; color: var(--wp-ai-input-text, var(--wp-ai-bot-text)) !important; }
+.wp-ai-chatbot-window .wp-ai-submit-btn:is(:focus, :active) { background: var(--wp-ai-send-bg) !important; color: var(--wp-ai-send-text) !important; }
+.wp-ai-chatbot-window .wp-ai-btn-danger:is(:focus, :active, :hover) { background: var(--wp-ai-del-hover-bg, #b32d2e) !important; color: #fff !important; }
+
+/* ---------- External forms (links, embeds, WordPress forms) ---------- */
+.wp-ai-ext { display: flex; flex-direction: column; gap: 8px; }
+.wp-ai-ext .wp-ai-form-title { margin: 0; }
+.wp-ai-ext-note { margin: 0; font-size: 13px; opacity: 0.8; }
+.wp-ai-chatbot-window a.wp-ai-ext-link { display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; }
+.wp-ai-ext-frame { display: block; width: 100%; border: 1px solid var(--wp-ai-border-color); border-radius: 10px; background: #fff; }
+.wp-ai-chatbot-window a.wp-ai-ext-open { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; font-size: 12px; font-weight: 600; text-decoration: underline; color: inherit; opacity: 0.75; }
+.wp-ai-ext .wp-ai-form-success[hidden] { display: none; }
+.wp-ai-ext-continue { align-self: stretch; }
+
+/* Optional proactive invitation, independent from chat messages and the RAG pipeline. */
+
+/* Nudge anchored directly to launcher (hidden WhatsApp menu takes no layout space). */
+
+/* Compact single-click Direct Link type */
+.wp-ai-direct-link{display:block;max-width:100%;margin:2px 0;}
+.wp-ai-direct-link-bubble{display:inline-flex;align-items:center;gap:8px;max-width:100%;box-sizing:border-box;background:var(--wp-ai-primary,#fc9504);color:#0a0a0a!important;text-decoration:none!important;font-weight:700;border-radius:15px;padding:11px 15px;overflow-wrap:anywhere;line-height:1.4;}
+.wp-ai-direct-link-bubble:hover,.wp-ai-direct-link-bubble:focus-visible{filter:brightness(.94);outline-offset:3px;}
+
+/* ---------- Chat inside a page: [akdk_chatbot] ---------- */
+.wp-ai-embed-wrap { width: 100%; max-width: var(--wp-ai-embed-width, 100%); margin: 0 auto; box-sizing: border-box; }
+.wp-ai-chatbot-window.wp-ai-embedded {
+    position: relative !important; inset: auto !important; top: auto !important; right: auto !important; bottom: auto !important; left: auto !important;
+    width: 100% !important; max-width: 100% !important;
+    height: var(--wp-ai-embed-height, 640px) !important; max-height: none !important; min-height: 360px;
+    transform: none !important; opacity: 1 !important; visibility: visible !important; pointer-events: auto !important;
+    z-index: auto !important; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--wp-ai-border-color) !important; border-radius: var(--wp-ai-chat-radius) !important;
+    transition: none;
+}
+.wp-ai-embed-no-header .wp-ai-chatbot-window.wp-ai-embedded .wp-ai-chat-header { display: none; }
+@media (max-width: 480px) {
+    /* On phones the chat stays in the page (not full screen); a little shorter so the page header stays visible. */
+    .wp-ai-chatbot-window.wp-ai-embedded { height: min(var(--wp-ai-embed-height, 640px), calc(100dvh - 90px)) !important; border-radius: 14px !important; }
+    .wp-ai-chatbot-window.wp-ai-embedded .wp-ai-chat-header { padding-top: 10px; }
+}
+
+/* ==================================================================
+ * 2.0.0: product cards, live chat, proactive messages
+ * ================================================================== */
+.wp-ai-chat-note { flex-shrink: 0; align-self: center; text-align: center; font-size: 12px; color: #71717a; margin: 2px auto 8px; padding: 3px 10px; background: rgba(0,0,0,0.04); border-radius: 999px; max-width: 90%; }
+.wp-ai-agent-message { border-left: 3px solid var(--wp-ai-primary-color, #fd9400); }
+.wp-ai-agent-name { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; opacity: .7; margin-bottom: 3px; }
+
+.wp-ai-chatbot-window .wp-ai-products { flex-shrink: 0; display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 10px; margin: -2px 0 10px; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+.wp-ai-chatbot-window .wp-ai-product { flex: 0 0 172px; scroll-snap-align: start; display: flex; flex-direction: column; background: var(--wp-ai-chat-bg, #fff); border: 1px solid var(--wp-ai-border-color, #ececec); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+.wp-ai-chatbot-window .wp-ai-products > .wp-ai-product:only-child { flex-basis: 220px; }
+.wp-ai-chatbot-window .wp-ai-product-img { display: block; aspect-ratio: 4 / 3; background: #f4f4f5; }
+.wp-ai-chatbot-window .wp-ai-product-img img { width: 100%; height: 100%; object-fit: cover; display: block; max-height: none; margin: 0; border-radius: 0; }
+.wp-ai-chatbot-window .wp-ai-product-info { padding: 8px 10px 4px; display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.wp-ai-chatbot-window .wp-ai-product-name { font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--wp-ai-bot-text, #0a0a0a) !important; text-decoration: none !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wp-ai-chatbot-window .wp-ai-product-name:hover { text-decoration: underline !important; }
+.wp-ai-chatbot-window .wp-ai-product-price { font-size: 13px; font-weight: 700; color: var(--wp-ai-bot-text, #0a0a0a); }
+.wp-ai-chatbot-window .wp-ai-product-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px 10px; }
+.wp-ai-chatbot-window .wp-ai-product-add, .wp-ai-chatbot-window .wp-ai-product-buy, .wp-ai-chatbot-window .wp-ai-product-cart { flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 6px 10px; border-radius: 8px; font-size: 12.5px; font-weight: 700; line-height: 1.1; cursor: pointer; text-decoration: none !important; font-family: inherit; box-sizing: border-box; letter-spacing: normal; text-transform: none; white-space: nowrap; }
+.wp-ai-chatbot-window .wp-ai-product-add { background: var(--wp-ai-send-bg, #fd9400); color: var(--wp-ai-send-text, #0a0a0a); border: 0; }
+.wp-ai-chatbot-window .wp-ai-product-add:hover { background: var(--wp-ai-send-hover-bg, #e58600); }
+.wp-ai-chatbot-window .wp-ai-product-add:disabled { opacity: .7; cursor: default; }
+.wp-ai-chatbot-window .wp-ai-product-add.is-loading { opacity: .6; }
+.wp-ai-chatbot-window .wp-ai-product-add.is-added { background: #16a34a; color: #fff; }
+.wp-ai-chatbot-window .wp-ai-product-buy, .wp-ai-chatbot-window .wp-ai-product-cart { background: transparent; color: var(--wp-ai-bot-text, #0a0a0a) !important; border: 1px solid var(--wp-ai-border-color, #e4e4e7); }
+.wp-ai-chatbot-window .wp-ai-product-buy:hover, .wp-ai-chatbot-window .wp-ai-product-cart:hover { border-color: var(--wp-ai-bot-text, #0a0a0a); }
+.wp-ai-chatbot-window .wp-ai-product-out { font-size: 12px; font-weight: 600; color: #b91c1c; }
+
+.wp-ai-human-offer { flex-shrink: 0; display: flex; justify-content: flex-start; margin: -4px 0 10px; }
+.wp-ai-human-offer button { background: transparent; border: 1px solid var(--wp-ai-border-color, #e4e4e7); color: var(--wp-ai-bot-text, #0a0a0a); border-radius: 999px; padding: 6px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.wp-ai-human-offer button:hover { border-color: var(--wp-ai-primary-color, #fd9400); }
+
+.wp-ai-pro-bubble { position: absolute; bottom: calc(100% + 12px); right: 0; width: max-content; max-width: min(280px, calc(100vw - 40px)); pointer-events: auto; background: #fff; color: #0a0a0a; border-radius: 14px 14px 4px 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.18); padding: 12px 30px 12px 14px; font-size: 14px; line-height: 1.4; animation: wpAiProIn .25s ease-out; z-index: 2; }
+.wp-ai-pos-left .wp-ai-pro-bubble { right: auto; left: 0; border-radius: 14px 14px 14px 4px; }
+.wp-ai-pro-text { all: unset; cursor: pointer; display: block; white-space: pre-wrap; word-break: break-word; }
+.wp-ai-pro-close { all: unset; position: absolute; top: 4px; right: 8px; font-size: 18px; line-height: 1; cursor: pointer; color: #71717a; padding: 2px 4px; }
+.wp-ai-pro-close:hover { color: #0a0a0a; }
+body.wp-ai-chat-open .wp-ai-pro-bubble { display: none; }
+.wp-ai-fab-container[data-unread]::after { content: attr(data-unread); position: absolute; top: -2px; right: -2px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: #dc2626; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+@keyframes wpAiProIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .wp-ai-pro-bubble { animation: none; } }
