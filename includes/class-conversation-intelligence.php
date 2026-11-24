@@ -18,7 +18,7 @@ class WP_AI_Chatbot_Conversation_Intelligence {
             'lead_qualification' => '1', 'lead_scoring' => '1', 'service_recommendations' => '1',
             'objection_detection' => '1', 'sentiment_awareness' => '1', 'conversation_summary' => '1',
             'knowledge_gap_detection' => '1', 'spam_detection' => '1', 'consent_required' => '1',
-            'human_review' => '1', 'lead_hot_threshold' => 75, 'lead_warm_threshold' => 40, 'max_followups' => 3,
+            'human_review' => '1', 'lead_hot_threshold' => 75, 'lead_warm_threshold' => 40, 'max_followups' => 3, 'n8n_webhook_url' => '', 'n8n_webhook_secret' => '',
         );
         return array_merge( $defaults, $saved );
     }
@@ -119,4 +119,54 @@ class WP_AI_Chatbot_Conversation_Intelligence {
         $rules[] = 'RAG: Conversation history describes the visitor; it is not verified business knowledge. Use the knowledge base and existing grounding rules for business facts.';
         return "### AK CONVERSATION INTELLIGENCE ###\n" . implode( "\n", $rules ) . "\n" . $context . "\n### END AK CONVERSATION INTELLIGENCE ###\n\n";
     }
+    /**
+     * Notify an optional HTTPS n8n endpoint after an existing lead form is saved.
+     * A submitted form is not treated as permission for marketing follow-up.
+     */
+    public static function dispatch_lead_webhook( $form, $values, $session = '', $page = '' ) {
+        $o = self::settings();
+        $url = isset( $o['n8n_webhook_url'] ) ? (string) $o['n8n_webhook_url'] : '';
+        if ( '' === $url || ! wp_http_validate_url( $url ) || 'https' !== strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) ) ) {
+            return false;
+        }
+        $consent = false;
+        foreach ( (array) $values as $key => $value ) {
+            if ( false !== strpos( strtolower( (string) $key ), 'consent' ) && in_array( strtolower( trim( (string) $value ) ), array( '1', 'yes', 'true', 'agree', 'agreed', 'i agree' ), true ) ) {
+                $consent = true;
+                break;
+            }
+        }
+        $session_meta = '' !== (string) $session && class_exists( 'WP_AI_Chatbot_Sessions' ) ? WP_AI_Chatbot_Sessions::get( $session ) : null;
+        $payload = array(
+            'event' => 'lead.form_submitted',
+            'created_at' => current_time( 'mysql', true ),
+            'site_url' => home_url( '/' ),
+            'form' => array( 'id' => isset( $form['id'] ) ? sanitize_key( $form['id'] ) : '', 'title' => isset( $form['title'] ) ? sanitize_text_field( $form['title'] ) : '' ),
+            'fields' => (array) $values,
+            'conversation' => array(
+                'session_id' => sanitize_text_field( (string) $session ),
+                'page_url' => esc_url_raw( (string) $page ),
+                'intent' => $session_meta ? sanitize_text_field( (string) $session_meta->intent ) : '',
+                'score' => $session_meta ? (int) $session_meta->score : -1,
+                'score_label' => $session_meta ? sanitize_key( (string) $session_meta->label ) : '',
+            ),
+            'contact_followup_consent' => $consent,
+        );
+        $body = wp_json_encode( $payload );
+        $headers = array( 'Content-Type' => 'application/json', 'X-AK-Event' => 'lead.form_submitted' );
+        if ( ! empty( $o['n8n_webhook_secret'] ) ) {
+            $headers['X-AK-Signature'] = 'sha256=' . hash_hmac( 'sha256', $body, (string) $o['n8n_webhook_secret'] );
+        }
+        $response = wp_remote_post( $url, array(
+            'timeout' => 3,
+            'blocking' => false,
+            'redirection' => 0,
+            'sslverify' => true,
+            'headers' => $headers,
+            'body' => $body,
+            'data_format' => 'body',
+        ) );
+        return ! is_wp_error( $response );
+    }
+
 }
