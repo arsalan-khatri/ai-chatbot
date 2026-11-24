@@ -67,6 +67,8 @@ class WP_AI_Chatbot_Admin_Settings {
         add_settings_field( 'lead_hot_threshold', 'Hot lead score threshold', array( $this, 'render_intelligence_threshold' ), 'wp-ai-chatbot-api', 'wp_ai_chatbot_intelligence_section', array( 'key' => 'lead_hot_threshold', 'default' => 75 ) );
         add_settings_field( 'lead_warm_threshold', 'Warm lead score threshold', array( $this, 'render_intelligence_threshold' ), 'wp-ai-chatbot-api', 'wp_ai_chatbot_intelligence_section', array( 'key' => 'lead_warm_threshold', 'default' => 40 ) );
         add_settings_field( 'max_followups', 'Maximum discovery questions', array( $this, 'render_intelligence_threshold' ), 'wp-ai-chatbot-api', 'wp_ai_chatbot_intelligence_section', array( 'key' => 'max_followups', 'default' => 3, 'min' => 1, 'max' => 5 ) );
+        add_settings_field( 'n8n_webhook_url', 'n8n lead webhook URL', array( $this, 'render_intelligence_text' ), 'wp-ai-chatbot-api', 'wp_ai_chatbot_intelligence_section', array( 'key' => 'n8n_webhook_url', 'type' => 'url' ) );
+        add_settings_field( 'n8n_webhook_secret', 'n8n webhook signing secret', array( $this, 'render_intelligence_text' ), 'wp-ai-chatbot-api', 'wp_ai_chatbot_intelligence_section', array( 'key' => 'n8n_webhook_secret', 'type' => 'password' ) );
 
         add_settings_section( 'wp_ai_chatbot_tokens_section', 'Token control', array( $this, 'tokens_section_callback' ), 'wp-ai-chatbot-api' );
         add_settings_field( 'token_saver', 'Token saver', array( $this, 'render_token_saver_field' ), 'wp-ai-chatbot-api', 'wp_ai_chatbot_tokens_section' );
@@ -190,6 +192,13 @@ class WP_AI_Chatbot_Admin_Settings {
         if ( isset( $sanitized['lead_warm_threshold'], $sanitized['lead_hot_threshold'] ) && $sanitized['lead_warm_threshold'] >= $sanitized['lead_hot_threshold'] ) {
             $sanitized['lead_warm_threshold'] = max( 0, (int) $sanitized['lead_hot_threshold'] - 1 );
         }
+        if ( isset( $input['n8n_webhook_url'] ) ) {
+            $url = esc_url_raw( trim( (string) $input['n8n_webhook_url'] ), array( 'https' ) );
+            $sanitized['n8n_webhook_url'] = ( $url && wp_http_validate_url( $url ) ) ? $url : '';
+        }
+        if ( isset( $input['n8n_webhook_secret'] ) ) {
+            $sanitized['n8n_webhook_secret'] = sanitize_text_field( (string) $input['n8n_webhook_secret'] );
+        }
         // This option group is only saved from this page, so a missing checkbox means "unchecked".
         if ( isset( $input['system_prompt'] ) ) {
             $sanitized['delete_data_on_uninstall'] = ! empty( $input['delete_data_on_uninstall'] ) ? '1' : '0';
@@ -238,6 +247,19 @@ class WP_AI_Chatbot_Admin_Settings {
             'human_review' => 'Recommend manual review when intent or qualification evidence is uncertain.',
         );
         echo '<p class="description">' . esc_html( isset( $help[ $key ] ) ? $help[ $key ] : '' ) . '</p>';
+    }
+
+    public function render_intelligence_text( $args ) {
+        $key = $args['key'];
+        $options = $this->options();
+        $value = isset( $options[ $key ] ) ? (string) $options[ $key ] : '';
+        $type = isset( $args['type'] ) ? $args['type'] : 'text';
+        echo '<input type="' . esc_attr( $type ) . '" name="wp_ai_chatbot_settings[' . esc_attr( $key ) . ']" value="' . esc_attr( $value ) . '" class="regular-text" autocomplete="off" />';
+        if ( 'n8n_webhook_url' === $key ) {
+            echo '<p class="description">Optional. HTTPS only. When an existing chatbot lead form is successfully submitted, send a lead.form_submitted event to this n8n webhook. The visitor has submitted a form; this does not mean they agreed to marketing or follow-up.</p>';
+        } else {
+            echo '<p class="description">Optional shared signing secret. Sent as an HMAC-SHA256 signature header so your n8n workflow can verify the event.</p>';
+        }
     }
 
     public function render_intelligence_threshold( $args ) {
