@@ -44,7 +44,10 @@ class WP_AI_Chatbot_Insights {
 		if ( $score < 0 ) {
 			return '';
 		}
-		return $score >= 70 ? 'hot' : ( $score >= 40 ? 'warm' : 'cold' );
+		$intelligence = class_exists( 'WP_AI_Chatbot_Conversation_Intelligence' ) ? WP_AI_Chatbot_Conversation_Intelligence::settings() : array();
+		$hot = isset( $intelligence['lead_hot_threshold'] ) ? (int) $intelligence['lead_hot_threshold'] : 70;
+		$warm = isset( $intelligence['lead_warm_threshold'] ) ? (int) $intelligence['lead_warm_threshold'] : 40;
+		return $score >= $hot ? 'hot' : ( $score >= $warm ? 'warm' : 'cold' );
 	}
 
 	/** Chats that need a (new) summary. @return string[] session IDs */
@@ -146,11 +149,15 @@ class WP_AI_Chatbot_Insights {
 		if ( strlen( $transcript ) > 6000 ) {
 			$transcript = '...' . substr( $transcript, -6000 );
 		}
-		$system = "You review website chats for a business and judge how likely the visitor is to buy or become a customer.\n"
+		$intelligence = class_exists( 'WP_AI_Chatbot_Conversation_Intelligence' ) ? WP_AI_Chatbot_Conversation_Intelligence::settings() : array();
+		$hot_threshold = isset( $intelligence['lead_hot_threshold'] ) ? (int) $intelligence['lead_hot_threshold'] : 70;
+		$warm_threshold = isset( $intelligence['lead_warm_threshold'] ) ? (int) $intelligence['lead_warm_threshold'] : 40;
+		$system = "You review website chats for a business and judge how likely the visitor is to buy or become a customer. Do not treat message count or a price question alone as buying intent. Unknown budget or timeline is neutral, not negative.\n"
 			. "Reply with JSON only, no other text: {\"summary\": \"...\", \"intent\": \"...\", \"score\": 0}\n"
 			. "- summary: at most 2 short sentences in English: who the visitor is (if known), what they wanted, and what happened or what to do next.\n"
 			. "- intent: 1 to 3 words, one of: buying, pricing, booking, order status, support, complaint, information, job, spam, other.\n"
-			. "- score 0-100: 80+ = ready to buy or asked for a quote/call/booking and left contact details; 60-79 = clear interest in a product or service, asked about price or availability; 40-59 = researching; 10-39 = general questions or support; 0-9 = spam, testing or no interest.";
+			. "- score 0-100: score explicit project fit, stated requirements, readiness and voluntary contact submission; do not invent signals. Hot threshold: " . $hot_threshold . "; Warm threshold: " . $warm_threshold . ".";
+
 		$reply = WP_AI_Chatbot_AI::chat( $system, array( array( 'role' => 'user', 'content' => "CHAT:\n" . $transcript ) ), array( 'max_tokens' => 220, 'temperature' => 0.1, 'timeout' => 30 ) );
 		if ( is_wp_error( $reply ) ) {
 			WP_AI_Chatbot_AI::record_error( 'Chat summary', $reply );
@@ -160,16 +167,18 @@ class WP_AI_Chatbot_Insights {
 		if ( ! $data ) {
 			return false;
 		}
-		$score = max( 0, min( 100, (int) $data['score'] ) );
-		if ( $forms > 0 || $has_contact ) {
-			$score = min( 100, $score + 15 ); // Left their details: a real lead.
+		$score_enabled = ! class_exists( 'WP_AI_Chatbot_Conversation_Intelligence' ) || '1' === (string) WP_AI_Chatbot_Conversation_Intelligence::settings()['lead_scoring'];
+		$summary_enabled = ! class_exists( 'WP_AI_Chatbot_Conversation_Intelligence' ) || '1' === (string) WP_AI_Chatbot_Conversation_Intelligence::settings()['conversation_summary'];
+		$score = $score_enabled ? max( 0, min( 100, (int) $data['score'] ) ) : -1;
+		if ( $score_enabled && ( $forms > 0 || $has_contact ) ) {
+			$score = min( 100, $score + 15 ); // Form submission is a signal, not permission for marketing.
 		}
-		$label = self::label_for( $score );
+		$label = $score_enabled ? self::label_for( $score ) : '';
 		$old   = WP_AI_Chatbot_Sessions::get( $sid );
 		WP_AI_Chatbot_Sessions::update(
 			$sid,
 			array(
-				'summary'         => sanitize_textarea_field( wp_html_excerpt( (string) $data['summary'], 400, '…' ) ),
+				'summary'         => $summary_enabled ? sanitize_textarea_field( wp_html_excerpt( (string) $data['summary'], 400, '…' ) ) : '',
 				'intent'          => sanitize_text_field( substr( strtolower( (string) $data['intent'] ), 0, 30 ) ),
 				'score'           => $score,
 				'label'           => $label,
