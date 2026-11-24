@@ -32,6 +32,7 @@ class WP_AI_Chatbot {
 			'class-lead-alerts.php',
 			'class-admin-settings.php',
 			'class-admin-notices.php',
+			'class-conversation-intelligence.php',
 			'class-api-handler.php',
 			'class-chat-renderer.php',
 			'class-external-forms.php',
