@@ -848,6 +848,9 @@ class WP_AI_Chatbot_Chat_Renderer {
 
         $page = wp_get_referer();
         WP_AI_Chatbot_Lead_Alerts::new_lead( $form_def, $insert, $session, $page && 0 === strpos( $page, home_url() ) ? $page : '' );
+        if ( class_exists( 'WP_AI_Chatbot_Conversation_Intelligence' ) ) {
+            WP_AI_Chatbot_Conversation_Intelligence::dispatch_lead_webhook( $form_def, $insert, $session, $page && 0 === strpos( $page, home_url() ) ? $page : '' );
+        }
 
         return rest_ensure_response( array(
             'success' => true,
