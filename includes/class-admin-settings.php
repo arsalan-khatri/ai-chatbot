@@ -46,6 +46,28 @@ class WP_AI_Chatbot_Admin_Settings {
         add_settings_section( 'wp_ai_chatbot_behaviour_section', 'Chatbot behaviour', array( $this, 'behaviour_section_callback' ), 'wp-ai-chatbot-api' );
         add_settings_field( 'system_prompt', 'Instructions (system prompt)', array( $this, 'render_system_prompt_field' ), 'wp-ai-chatbot-api', 'wp_ai_chatbot_behaviour_section' );
 
+        add_settings_section( 'wp_ai_chatbot_intelligence_section', 'Conversation Intelligence', array( $this, 'intelligence_section_callback' ), 'wp-ai-chatbot-api' );
+        foreach ( array(
+            'intelligence_enabled' => 'Enable intelligence engine',
+            'adaptive_questions' => 'Adaptive follow-up questions',
+            'intent_detection' => 'Visitor intent detection',
+            'lead_qualification' => 'Lead qualification guidance',
+            'lead_scoring' => 'Evidence-based lead scoring',
+            'service_recommendations' => 'Smart service recommendations',
+            'objection_detection' => 'Objection and buying-concern detection',
+            'sentiment_awareness' => 'Sentiment-aware responses',
+            'conversation_summary' => 'Conversation summary guidance',
+            'knowledge_gap_detection' => 'Knowledge-gap detection',
+            'spam_detection' => 'Spam and abuse awareness',
+            'consent_required' => 'Require explicit contact consent',
+            'human_review' => 'Recommend admin review for uncertain leads',
+        ) as $key => $label ) {
+            add_settings_field( $key, $label, array( $this, 'render_intelligence_toggle' ), 'wp-ai-chatbot-api', 'wp_ai_chatbot_intelligence_section', array( 'key' => $key ) );
+        }
+        add_settings_field( 'lead_hot_threshold', 'Hot lead score threshold', array( $this, 'render_intelligence_threshold' ), 'wp-ai-chatbot-api', 'wp_ai_chatbot_intelligence_section', array( 'key' => 'lead_hot_threshold', 'default' => 75 ) );
+        add_settings_field( 'lead_warm_threshold', 'Warm lead score threshold', array( $this, 'render_intelligence_threshold' ), 'wp-ai-chatbot-api', 'wp_ai_chatbot_intelligence_section', array( 'key' => 'lead_warm_threshold', 'default' => 40 ) );
+        add_settings_field( 'max_followups', 'Maximum discovery questions', array( $this, 'render_intelligence_threshold' ), 'wp-ai-chatbot-api', 'wp_ai_chatbot_intelligence_section', array( 'key' => 'max_followups', 'default' => 3, 'min' => 1, 'max' => 5 ) );
+
         add_settings_section( 'wp_ai_chatbot_tokens_section', 'Token control', array( $this, 'tokens_section_callback' ), 'wp-ai-chatbot-api' );
         add_settings_field( 'token_saver', 'Token saver', array( $this, 'render_token_saver_field' ), 'wp-ai-chatbot-api', 'wp_ai_chatbot_tokens_section' );
         add_settings_field( 'token_knowledge', 'Knowledge per question', array( $this, 'render_token_knowledge_field' ), 'wp-ai-chatbot-api', 'wp_ai_chatbot_tokens_section' );
@@ -153,6 +175,21 @@ class WP_AI_Chatbot_Admin_Settings {
         if ( isset( $input['voice_max_seconds'] ) ) {
             $sanitized['voice_max_seconds'] = max( 5, min( 60, intval( $input['voice_max_seconds'] ) ) );
         }
+        // Intelligence switches are saved together with the existing settings form.
+        $intelligence_keys = array( 'intelligence_enabled', 'adaptive_questions', 'intent_detection', 'lead_qualification', 'lead_scoring', 'service_recommendations', 'objection_detection', 'sentiment_awareness', 'conversation_summary', 'knowledge_gap_detection', 'spam_detection', 'consent_required', 'human_review' );
+        if ( isset( $input['system_prompt'] ) ) {
+            foreach ( $intelligence_keys as $key ) {
+                $sanitized[ $key ] = ! empty( $input[ $key ] ) ? '1' : '0';
+            }
+        }
+        foreach ( array( 'lead_hot_threshold' => array( 75, 1, 100 ), 'lead_warm_threshold' => array( 40, 0, 99 ), 'max_followups' => array( 3, 1, 5 ) ) as $key => $limits ) {
+            if ( isset( $input[ $key ] ) ) {
+                $sanitized[ $key ] = max( $limits[1], min( $limits[2], absint( $input[ $key ] ) ) );
+            }
+        }
+        if ( isset( $sanitized['lead_warm_threshold'], $sanitized['lead_hot_threshold'] ) && $sanitized['lead_warm_threshold'] >= $sanitized['lead_hot_threshold'] ) {
+            $sanitized['lead_warm_threshold'] = max( 0, (int) $sanitized['lead_hot_threshold'] - 1 );
+        }
         // This option group is only saved from this page, so a missing checkbox means "unchecked".
         if ( isset( $input['system_prompt'] ) ) {
             $sanitized['delete_data_on_uninstall'] = ! empty( $input['delete_data_on_uninstall'] ) ? '1' : '0';
@@ -173,6 +210,48 @@ class WP_AI_Chatbot_Admin_Settings {
 
     public function api_section_callback() {
         echo '<p>Choose a provider and paste its API key. Leave the model empty to use the recommended one.</p>';
+    }
+
+    public function intelligence_section_callback() {
+        echo '<p>Control how the assistant understands visitors and guides genuine prospects. These settings guide the AI; structured CRM scoring, persistent analytics and outbound automations require their own storage/workflow integrations.</p>';
+    }
+
+    public function render_intelligence_toggle( $args ) {
+        $key = $args['key'];
+        $options = $this->options();
+        $defaults_on = array( 'intelligence_enabled', 'adaptive_questions', 'intent_detection', 'lead_qualification', 'lead_scoring', 'service_recommendations', 'objection_detection', 'sentiment_awareness', 'conversation_summary', 'knowledge_gap_detection', 'spam_detection', 'consent_required', 'human_review' );
+        $enabled = isset( $options[ $key ] ) ? '1' === (string) $options[ $key ] : in_array( $key, $defaults_on, true );
+        echo '<label><input type="checkbox" name="wp_ai_chatbot_settings[' . esc_attr( $key ) . ']" value="1" ' . checked( $enabled, true, false ) . ' /> Enable</label>';
+        $help = array(
+            'intelligence_enabled' => 'Master switch for the intelligence prompt layer. Existing RAG, providers, forms and chat features remain available when off.',
+            'adaptive_questions' => 'Ask only useful questions, one at a time; do not repeat details already shared.',
+            'intent_detection' => 'Distinguish research, support, browsing, project and purchase intent.',
+            'lead_qualification' => 'Understand need, problem, service fit, readiness and decision context without pressuring visitors.',
+            'lead_scoring' => 'Estimate a 0–100 score from explicit buying evidence; unknown budget or timeline is not a negative signal.',
+            'service_recommendations' => 'Match a visitor need only to services supported by the knowledge base.',
+            'objection_detection' => 'Recognize price, trust, timing and technical concerns and respond helpfully.',
+            'sentiment_awareness' => 'Use shorter, calmer responses when a visitor appears frustrated or confused.',
+            'conversation_summary' => 'Prepare concise summaries when an existing lead or admin workflow requests one.',
+            'knowledge_gap_detection' => 'Identify questions that cannot be answered from current business knowledge; never invent facts.',
+            'spam_detection' => 'Recognize likely spam patterns. Do not block genuine visitors based only on message count.',
+            'consent_required' => 'Never request or submit contact details for follow-up without clear permission.',
+            'human_review' => 'Recommend manual review when intent or qualification evidence is uncertain.',
+        );
+        echo '<p class="description">' . esc_html( isset( $help[ $key ] ) ? $help[ $key ] : '' ) . '</p>';
+    }
+
+    public function render_intelligence_threshold( $args ) {
+        $key = $args['key'];
+        $options = $this->options();
+        $value = isset( $options[ $key ] ) ? absint( $options[ $key ] ) : (int) $args['default'];
+        $min = isset( $args['min'] ) ? (int) $args['min'] : 0;
+        $max = isset( $args['max'] ) ? (int) $args['max'] : 100;
+        echo '<input type="number" name="wp_ai_chatbot_settings[' . esc_attr( $key ) . ']" value="' . esc_attr( $value ) . '" min="' . esc_attr( $min ) . '" max="' . esc_attr( $max ) . '" style="width:90px" />';
+        if ( 'max_followups' === $key ) {
+            echo '<p class="description">Soft cap across a conversation, not a target. The assistant may ask fewer questions or none.</p>';
+        } else {
+            echo '<p class="description">Used as a guidance threshold for the AI lead assessment, not as an automatic CRM status change.</p>';
+        }
     }
 
     public function behaviour_section_callback() {
